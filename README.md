@@ -1,6 +1,7 @@
 Silent Infiltration
 
-Dieser Quelltext ist der Quelltext zum Buch (ohne Kernel unhook implementation):
+Der Quelltext Program.cs ist der Quelltext zum Buch (ohne Kernel unhook implementation):
+(pe.cs ist die Ausgangsquelltext wird nicht gebraucht, dient nur für Archivierung)
 
 Id ProcessName SessionId
   -- ----------- ---------
