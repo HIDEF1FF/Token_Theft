@@ -7,48 +7,53 @@ Der Quelltext Program.cs ist der Quelltext zum Buch (ohne Kernel unhook implemen
 Einfache manuelle Lösung (funktioniert garantiert)
 Führe diese CMD-Befehle als Administrator aus (nicht PowerShell):
 
-cmd
-cd %temp%
+:: 1. Stoppe den Security-Account-Manager Dienst (kurzzeitig)
+net stop samss
 
-:: 1. Exportiere die Richtlinie
-secedit /export /cfg secpol_original.inf /areas USER_RIGHTS
-
-:: 2. Kopiere die Datei
-copy secpol_original.inf secpol_modified.inf
-
-:: 3. Öffne die Datei zum Bearbeiten
-notepad secpol_modified.inf
-In Notepad:
-
-Suche nach SeAssignPrimaryTokenPrivilege
-
-Du findest eine Zeile wie:
-SeAssignPrimaryTokenPrivilege = *S-1-5-19,*S-1-5-20,...
-
-Füge am Ende der Zeile deine SID hinzu (Tippe ein Komma und dann deine SID):
-,*S-1-5-21-2963405314-4200755379-1400371717-1001
-
-Die Zeile sollte dann so aussehen:
-SeAssignPrimaryTokenPrivilege = *S-1-5-19,*S-1-5-20,...,*S-1-5-21-2963405314-4200755379-1400371717-1001
-
-Speichern (Strg+S) und Notepad schließen
-
-Dann importieren:
-
-cmd
-:: 4. Importiere die geänderte Datei
-secedit /configure /db secedit.sdb /cfg secpol_modified.inf /areas USER_RIGHTS /log secedit.log
-
-:: 5. Erfolg prüfen
-if %errorlevel% equ 0 (echo Erfolg) else (echo Fehler - siehe Log)
-Wenn das auch nicht funktioniert: Komplette Neuaufsetzung
-Manchmal ist die secedit-Datenbank korrupt. Dann hilft nur noch:
-
-cmd
-:: 1. Datenbank löschen
+:: 2. Lösche die beschädigte Datenbank
 del /f /q %windir%\security\database\secedit.sdb
 
-:: 2. Neue Datenbank aus Vorlage erstellen
-secedit /configure /cfg %windir%\inf\defltbase.inf /db secedit.sdb
+:: 3. Erstelle eine neue Datenbank aus der Standardvorlage
+secedit /configure /cfg %windir%\inf\defltbase.inf /db %windir%\security\database\secedit.sdb
 
-:: 3. Jetzt wieder den obigen Export/Import-Versuch starten
+:: 4. Starte den Dienst neu
+net start samss
+
+Dann das Privileg auf einem anderen Weg hinzufügen (Registry)
+cmd
+
+
+:: 1. Exportiere die aktuelle Richtlinie
+secedit /export /cfg %temp%\secpol.inf
+
+:: 2. Öffne die Datei
+notepad %temp%\secpol.inf
+
+In Notepad:
+
+Suche nach [Privilege Rights] (ohne die Anführungszeichen)
+
+Darunter sollte SeAssignPrimaryTokenPrivilege stehen
+
+Wenn nicht vorhanden, füge unter [Privilege Rights] diese Zeile ein:
+
+text
+SeAssignPrimaryTokenPrivilege = *S-1-5-21-2963405314-4200755379-1400371717-1001
+Speichern und schließen
+
+cmd
+
+:: 3. Importiere die Richtlinie
+secedit /configure /db %temp%\secedit.sdb /cfg %temp%\secpol.inf /areas USER_RIGHTS
+
+:: 4. Direkter Registry-Eintrag (Fallback)
+reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Secedit\Privileges" /v "SeAssignPrimaryTokenPrivilege" /t REG_SZ /d "*S-1-5-21-2963405314-4200755379-1400371717-1001" /f
+
+
+Neustart
+cmd
+
+shutdown /r /t 0
+Nach dem Neustart prüfen:
+cmd
+whoami /priv | findstr AssignPrimaryToken
