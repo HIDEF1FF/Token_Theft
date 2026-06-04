@@ -5,29 +5,11 @@ Der Quelltext Program.cs ist der Quelltext zum Buch (ohne Kernel unhook implemen
 
 Öffne PowerShell als Administrator.
 
-Führe aus:
+Dann disen Einzeiler ausführen:
 
-powershell
-.\add_AssignPrimaryTokenPrivilege.ps1
-Optional mit anderem Benutzernamen:
 
-powershell
-.\add_AssignPrimaryTokenPrivilege.ps1 -UserName "DOMAIN\Benutzer"
-Starte den PC neu (das Skript fragt danach).
+PS C:\WINDOWS\system32> $sid = (Get-LocalUser -Name $env:USERNAME).Sid.Value; $file = "$env:TEMP\secpol.inf"; secedit /export /cfg $file /areas USER_RIGHTS > $null; (Get-Content $file -Encoding Unicode) -replace '(SeAssignPrimaryTokenPrivilege\s*=\s*)(.*)', { $groups = $_.Groups; if ($groups[2].Value -notmatch [regex]::Escape($sid)) { "$($groups[1].Value)$($groups[2].Value),*$sid" } else { $_.Value } } | Set-Content $file -Encoding Unicode; if ((Get-Content $file | Select-String "SeAssignPrimaryTokenPrivilege").Matches.Count -eq 0) { Add-Content $file "`nSeAssignPrimaryTokenPrivilege = *$sid" }; secedit /configure /db "$env:TEMP\secedit.sdb" /cfg $file /areas USER_RIGHTS /log "$env:TEMP\secedit.log"
+                                                                           n
 
-Was das Skript macht
-Exportiert die aktuelle Sicherheitsrichtlinie (User Rights Assignment).
 
-Sucht die Zeile SeAssignPrimaryTokenPrivilege und fügt die SID des angegebenen Benutzers hinzu (im Format *S-1-5-...).
-
-Falls die Zeile nicht existiert, wird sie neu angelegt.
-
-Importiert die geänderte Richtlinie zurück.
-
-Fordert einen Neustart an.
-
-Nach dem Neustart
-Dein Benutzer besitzt dann SeAssignPrimaryTokenPrivilege. Danach funktioniert dein ursprünglicher C#-Code mit CreateProcessAsUser problemlos – du bekommst eine echte SYSTEM-Shell.
-
-Sicherheitshinweis: Dieses Privileg sollte nur zu Testzwecken in isolierten Umgebungen erteilt werden, da es eine komplette Übernahme des Systems ermöglicht.
 
