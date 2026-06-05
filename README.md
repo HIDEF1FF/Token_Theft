@@ -1,10 +1,9 @@
 Silent Infiltration
 
 Der Quelltext Program.cs ist der Quelltext zum Buch (ohne Kernel unhook implementation):
-(pe.cs ist die Ausgangsquelltext wird nicht gebraucht, dient nur für Archivierung)
 
 
-Einfache manuelle Lösung (funktioniert garantiert)
+Einfache manuelle Lösung für die Funktion des Programms erforderliche Rechtevergabe (funktioniert garantiert)
 Führe diese CMD-Befehle als Administrator aus (nicht PowerShell):
 
 :: 1. Stoppe den Security-Account-Manager Dienst (kurzzeitig)
