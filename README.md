@@ -1,4 +1,4 @@
-Silent Infiltration
+Silent Infiltration (Windows 64Bit)
 
 Der Quelltext Program.cs ist der Quelltext zum Buch (ohne Kernel unhook implementation):
 
@@ -56,3 +56,29 @@ Hartkodiere niemals eine Benutzer-SID, da sie nicht portabel ist.
 Verwende die PowerShell oder WMIC-Befehle in deinem Tool, um die SID des gewünschten Zielbenutzers auf dem aktuellen System dynamisch zu ermitteln.
 
 Stelle sicher, dass dein Code mit den notwendigen Rechten läuft, um das SeAssignPrimaryTokenPrivilege effektiv nutzen zu können.
+
+
+**********************************************************************************************************************************************
+2_Program.cs Starten und von der neuen Console mit Systemrechten
+whoami -priv/
+
+muss NT/System sein jetz.
+
+
+**********************************************************************************************************************************************
+3_SamDump.txt  den Einzeiler in der system console aus führen.
+
+
+**********************************************************************************************************************************************
+4_Sam.cs ausführen um Benutzernamen und NTLM Hashes zu erlangen
+
+Dann ein online NTLM Hash Cracker anwenden auf den Hash. Es kann bis 72 Stunden Dauern (onlinehashcrack.com)
+
+https://app.onlinehashcrack.com/
+
+
+
+
+
+
+
