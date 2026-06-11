@@ -1,0 +1,1 @@
+Remove-Item payload_data.h; Remove-Item -Recurse -Force .\publish; Write-Host "[+] DONE: svchost.exe created" -ForegroundColor Green
