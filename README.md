@@ -1,7 +1,12 @@
 Silent Infiltration (Windows 64Bit)
 
-Der Quelltext Program.cs ist der Quelltext zum ersten Buch Silent Infiltration bei AMAZON.DE (ohne Kernel unhook implementation):
-Im Ordner Ordner Final_HellsHall_2026_06_26  befindet sich das Project : Reflective DLL Injection mit TokenTheft als Payload mit Rechteerweiterung und diversen Stealth mechanismen mit HellsHall (indirect syscall) und GateKeeper  
+
+Im Ordner HellsGate_System_admin_Console ist der Quellcode zu meinem ersten Buch Silent Infiltration - Hells Gate
+Themen: HellsGate (Direct Syscall), Stack Spoofing (gegen Stackwalk) , TextProtector unhooking, EDR Silence
+
+Im Ordner Ordner Final_HellsHall_2026_06_26  befindet sich das Project zum Buch Silent Infiltration - HellsHall 
+Themen: Reflective DLL Injection mit TokenTheft als Payload mit Rechteerweiterung und diversen Stealth mechanismen mit HellsHall (indirect syscall) und GateKeeper  
+
 
 
 **********************************************************************************************************************************************
@@ -59,23 +64,9 @@ Verwende die PowerShell oder WMIC-Befehle in deinem Tool, um die SID des gewüns
 Stelle sicher, dass dein Code mit den notwendigen Rechten läuft, um das SeAssignPrimaryTokenPrivilege effektiv nutzen zu können.
 
 
-**********************************************************************************************************************************************
-2_Program.cs Starten und von der neuen Console mit Systemrechten
-whoami -priv/
-
-muss NT/System sein jetz.
 
 
-**********************************************************************************************************************************************
-3_SamDump.txt  den Einzeiler in der system console aus führen.
 
-
-**********************************************************************************************************************************************
-4_Sam.cs ausführen um Benutzernamen und NTLM Hashes zu erlangen
-
-Dann ein online NTLM Hash Cracker anwenden auf den Hash. Es kann bis 72 Stunden Dauern (onlinehashcrack.com)
-
-https://app.onlinehashcrack.com/
 
 
 
