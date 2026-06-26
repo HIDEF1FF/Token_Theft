@@ -1,6 +1,7 @@
 Silent Infiltration (Windows 64Bit)
 
-Der Quelltext Program.cs ist der Quelltext zum Buch (ohne Kernel unhook implementation):
+Der Quelltext Program.cs ist der Quelltext zum ersten Buch Silent Infiltration bei AMAZON.DE (ohne Kernel unhook implementation):
+Im Ordner Ordner Final_HellsHall_2026_06_26  befindet sich das Project : Reflective DLL Injection mit TokenTheft als Payload mit Rechteerweiterung und diversen Stealth mechanismen mit HellsHall (indirect syscall) und GateKeeper  
 
 
 **********************************************************************************************************************************************
