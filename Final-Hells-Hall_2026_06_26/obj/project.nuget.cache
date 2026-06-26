@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "/fM1SNYgBj0=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\RMW PC 2 ueb\\Desktop\\HellsHall\\HellsHallPayload.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\RMW PC 2 ueb\\.nuget\\packages\\microsoft.netframework.referenceassemblies\\1.0.3\\microsoft.netframework.referenceassemblies.1.0.3.nupkg.sha512",
+    "C:\\Users\\RMW PC 2 ueb\\.nuget\\packages\\microsoft.netframework.referenceassemblies.net48\\1.0.3\\microsoft.netframework.referenceassemblies.net48.1.0.3.nupkg.sha512",
+    "C:\\Users\\RMW PC 2 ueb\\.nuget\\packages\\system.codedom\\7.0.0\\system.codedom.7.0.0.nupkg.sha512",
+    "C:\\Users\\RMW PC 2 ueb\\.nuget\\packages\\system.management\\7.0.2\\system.management.7.0.2.nupkg.sha512"
+  ],
+  "logs": []
+}
