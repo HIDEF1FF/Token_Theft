@@ -1,0 +1,42 @@
+C:\Users\ip-el\OneDrive\Desktop\tt\tt\tt\bin\Debug\net10.0\tt.exe
+C:\Users\ip-el\OneDrive\Desktop\tt\tt\tt\bin\Debug\net10.0\tt.deps.json
+C:\Users\ip-el\OneDrive\Desktop\tt\tt\tt\bin\Debug\net10.0\tt.runtimeconfig.json
+C:\Users\ip-el\OneDrive\Desktop\tt\tt\tt\bin\Debug\net10.0\tt.dll
+C:\Users\ip-el\OneDrive\Desktop\tt\tt\tt\bin\Debug\net10.0\tt.pdb
+C:\Users\ip-el\OneDrive\Desktop\tt\tt\tt\obj\Debug\net10.0\tt.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\ip-el\OneDrive\Desktop\tt\tt\tt\obj\Debug\net10.0\tt.AssemblyInfoInputs.cache
+C:\Users\ip-el\OneDrive\Desktop\tt\tt\tt\obj\Debug\net10.0\tt.AssemblyInfo.cs
+C:\Users\ip-el\OneDrive\Desktop\tt\tt\tt\obj\Debug\net10.0\tt.csproj.CoreCompileInputs.cache
+C:\Users\ip-el\OneDrive\Desktop\tt\tt\tt\obj\Debug\net10.0\tt.dll
+C:\Users\ip-el\OneDrive\Desktop\tt\tt\tt\obj\Debug\net10.0\refint\tt.dll
+C:\Users\ip-el\OneDrive\Desktop\tt\tt\tt\obj\Debug\net10.0\tt.pdb
+C:\Users\ip-el\OneDrive\Desktop\tt\tt\tt\obj\Debug\net10.0\tt.genruntimeconfig.cache
+C:\Users\ip-el\OneDrive\Desktop\tt\tt\tt\obj\Debug\net10.0\ref\tt.dll
+C:\Users\ip-el\OneDrive\Desktop\tt - Kopie\tt\tt\bin\Debug\net10.0\tt.exe
+C:\Users\ip-el\OneDrive\Desktop\tt - Kopie\tt\tt\bin\Debug\net10.0\tt.deps.json
+C:\Users\ip-el\OneDrive\Desktop\tt - Kopie\tt\tt\bin\Debug\net10.0\tt.runtimeconfig.json
+C:\Users\ip-el\OneDrive\Desktop\tt - Kopie\tt\tt\bin\Debug\net10.0\tt.dll
+C:\Users\ip-el\OneDrive\Desktop\tt - Kopie\tt\tt\bin\Debug\net10.0\tt.pdb
+C:\Users\ip-el\OneDrive\Desktop\tt - Kopie\tt\tt\obj\Debug\net10.0\tt.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\ip-el\OneDrive\Desktop\tt - Kopie\tt\tt\obj\Debug\net10.0\tt.AssemblyInfoInputs.cache
+C:\Users\ip-el\OneDrive\Desktop\tt - Kopie\tt\tt\obj\Debug\net10.0\tt.AssemblyInfo.cs
+C:\Users\ip-el\OneDrive\Desktop\tt - Kopie\tt\tt\obj\Debug\net10.0\tt.csproj.CoreCompileInputs.cache
+C:\Users\ip-el\OneDrive\Desktop\tt - Kopie\tt\tt\obj\Debug\net10.0\tt.dll
+C:\Users\ip-el\OneDrive\Desktop\tt - Kopie\tt\tt\obj\Debug\net10.0\refint\tt.dll
+C:\Users\ip-el\OneDrive\Desktop\tt - Kopie\tt\tt\obj\Debug\net10.0\tt.pdb
+C:\Users\ip-el\OneDrive\Desktop\tt - Kopie\tt\tt\obj\Debug\net10.0\tt.genruntimeconfig.cache
+C:\Users\ip-el\OneDrive\Desktop\tt - Kopie\tt\tt\obj\Debug\net10.0\ref\tt.dll
+C:\Users\ip-el\OneDrive\Desktop\privilege escalation - Kopie\tt\tt\bin\Debug\net10.0\tt.exe
+C:\Users\ip-el\OneDrive\Desktop\privilege escalation - Kopie\tt\tt\bin\Debug\net10.0\tt.deps.json
+C:\Users\ip-el\OneDrive\Desktop\privilege escalation - Kopie\tt\tt\bin\Debug\net10.0\tt.runtimeconfig.json
+C:\Users\ip-el\OneDrive\Desktop\privilege escalation - Kopie\tt\tt\bin\Debug\net10.0\tt.dll
+C:\Users\ip-el\OneDrive\Desktop\privilege escalation - Kopie\tt\tt\bin\Debug\net10.0\tt.pdb
+C:\Users\ip-el\OneDrive\Desktop\privilege escalation - Kopie\tt\tt\obj\Debug\net10.0\tt.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\ip-el\OneDrive\Desktop\privilege escalation - Kopie\tt\tt\obj\Debug\net10.0\tt.AssemblyInfoInputs.cache
+C:\Users\ip-el\OneDrive\Desktop\privilege escalation - Kopie\tt\tt\obj\Debug\net10.0\tt.AssemblyInfo.cs
+C:\Users\ip-el\OneDrive\Desktop\privilege escalation - Kopie\tt\tt\obj\Debug\net10.0\tt.csproj.CoreCompileInputs.cache
+C:\Users\ip-el\OneDrive\Desktop\privilege escalation - Kopie\tt\tt\obj\Debug\net10.0\tt.dll
+C:\Users\ip-el\OneDrive\Desktop\privilege escalation - Kopie\tt\tt\obj\Debug\net10.0\refint\tt.dll
+C:\Users\ip-el\OneDrive\Desktop\privilege escalation - Kopie\tt\tt\obj\Debug\net10.0\tt.pdb
+C:\Users\ip-el\OneDrive\Desktop\privilege escalation - Kopie\tt\tt\obj\Debug\net10.0\tt.genruntimeconfig.cache
+C:\Users\ip-el\OneDrive\Desktop\privilege escalation - Kopie\tt\tt\obj\Debug\net10.0\ref\tt.dll

@@ -1,0 +1,28 @@
+C:\Users\RMW PC 2 ueb\Desktop\samc#\ConsoleApp1\obj\Debug\net10.0\ConsoleApp1.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\RMW PC 2 ueb\Desktop\samc#\ConsoleApp1\obj\Debug\net10.0\ConsoleApp1.AssemblyInfoInputs.cache
+C:\Users\RMW PC 2 ueb\Desktop\samc#\ConsoleApp1\obj\Debug\net10.0\ConsoleApp1.AssemblyInfo.cs
+C:\Users\RMW PC 2 ueb\Desktop\samc#\ConsoleApp1\obj\Debug\net10.0\ConsoleApp1.csproj.CoreCompileInputs.cache
+C:\Users\RMW PC 2 ueb\Desktop\samc#\ConsoleApp1\bin\Debug\net10.0\ConsoleApp1.exe
+C:\Users\RMW PC 2 ueb\Desktop\samc#\ConsoleApp1\bin\Debug\net10.0\ConsoleApp1.deps.json
+C:\Users\RMW PC 2 ueb\Desktop\samc#\ConsoleApp1\bin\Debug\net10.0\ConsoleApp1.runtimeconfig.json
+C:\Users\RMW PC 2 ueb\Desktop\samc#\ConsoleApp1\bin\Debug\net10.0\ConsoleApp1.dll
+C:\Users\RMW PC 2 ueb\Desktop\samc#\ConsoleApp1\bin\Debug\net10.0\ConsoleApp1.pdb
+C:\Users\RMW PC 2 ueb\Desktop\samc#\ConsoleApp1\obj\Debug\net10.0\ConsoleApp1.dll
+C:\Users\RMW PC 2 ueb\Desktop\samc#\ConsoleApp1\obj\Debug\net10.0\refint\ConsoleApp1.dll
+C:\Users\RMW PC 2 ueb\Desktop\samc#\ConsoleApp1\obj\Debug\net10.0\ConsoleApp1.pdb
+C:\Users\RMW PC 2 ueb\Desktop\samc#\ConsoleApp1\obj\Debug\net10.0\ConsoleApp1.genruntimeconfig.cache
+C:\Users\RMW PC 2 ueb\Desktop\samc#\ConsoleApp1\obj\Debug\net10.0\ref\ConsoleApp1.dll
+C:\Users\RMW PC 2 ueb\Documents\Uebungsordner\Papp_Norbert\X-Files\privilege escalation - Funktioniert -04_06_2026\samc#\ConsoleApp1\bin\Debug\net10.0\ConsoleApp1.exe
+C:\Users\RMW PC 2 ueb\Documents\Uebungsordner\Papp_Norbert\X-Files\privilege escalation - Funktioniert -04_06_2026\samc#\ConsoleApp1\bin\Debug\net10.0\ConsoleApp1.deps.json
+C:\Users\RMW PC 2 ueb\Documents\Uebungsordner\Papp_Norbert\X-Files\privilege escalation - Funktioniert -04_06_2026\samc#\ConsoleApp1\bin\Debug\net10.0\ConsoleApp1.runtimeconfig.json
+C:\Users\RMW PC 2 ueb\Documents\Uebungsordner\Papp_Norbert\X-Files\privilege escalation - Funktioniert -04_06_2026\samc#\ConsoleApp1\bin\Debug\net10.0\ConsoleApp1.dll
+C:\Users\RMW PC 2 ueb\Documents\Uebungsordner\Papp_Norbert\X-Files\privilege escalation - Funktioniert -04_06_2026\samc#\ConsoleApp1\bin\Debug\net10.0\ConsoleApp1.pdb
+C:\Users\RMW PC 2 ueb\Documents\Uebungsordner\Papp_Norbert\X-Files\privilege escalation - Funktioniert -04_06_2026\samc#\ConsoleApp1\obj\Debug\net10.0\ConsoleApp1.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\RMW PC 2 ueb\Documents\Uebungsordner\Papp_Norbert\X-Files\privilege escalation - Funktioniert -04_06_2026\samc#\ConsoleApp1\obj\Debug\net10.0\ConsoleApp1.AssemblyInfoInputs.cache
+C:\Users\RMW PC 2 ueb\Documents\Uebungsordner\Papp_Norbert\X-Files\privilege escalation - Funktioniert -04_06_2026\samc#\ConsoleApp1\obj\Debug\net10.0\ConsoleApp1.AssemblyInfo.cs
+C:\Users\RMW PC 2 ueb\Documents\Uebungsordner\Papp_Norbert\X-Files\privilege escalation - Funktioniert -04_06_2026\samc#\ConsoleApp1\obj\Debug\net10.0\ConsoleApp1.csproj.CoreCompileInputs.cache
+C:\Users\RMW PC 2 ueb\Documents\Uebungsordner\Papp_Norbert\X-Files\privilege escalation - Funktioniert -04_06_2026\samc#\ConsoleApp1\obj\Debug\net10.0\ConsoleApp1.dll
+C:\Users\RMW PC 2 ueb\Documents\Uebungsordner\Papp_Norbert\X-Files\privilege escalation - Funktioniert -04_06_2026\samc#\ConsoleApp1\obj\Debug\net10.0\refint\ConsoleApp1.dll
+C:\Users\RMW PC 2 ueb\Documents\Uebungsordner\Papp_Norbert\X-Files\privilege escalation - Funktioniert -04_06_2026\samc#\ConsoleApp1\obj\Debug\net10.0\ConsoleApp1.pdb
+C:\Users\RMW PC 2 ueb\Documents\Uebungsordner\Papp_Norbert\X-Files\privilege escalation - Funktioniert -04_06_2026\samc#\ConsoleApp1\obj\Debug\net10.0\ConsoleApp1.genruntimeconfig.cache
+C:\Users\RMW PC 2 ueb\Documents\Uebungsordner\Papp_Norbert\X-Files\privilege escalation - Funktioniert -04_06_2026\samc#\ConsoleApp1\obj\Debug\net10.0\ref\ConsoleApp1.dll
