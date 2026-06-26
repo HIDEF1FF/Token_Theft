@@ -5,7 +5,7 @@ Im Ordner HellsGate_System_admin_Console ist der Quellcode zu meinem ersten Buch
 Themen: HellsGate (Direct Syscall), Stack Spoofing (gegen Stackwalk) , TextProtector unhooking, EDR Silence
 
 Im Ordner Ordner Final_HellsHall_2026_06_26  befindet sich das Project zum Buch Silent Infiltration - HellsHall 
-Themen: Reflective DLL Injection mit TokenTheft als Payload mit Rechteerweiterung und diversen Stealth mechanismen mit HellsHall (indirect syscall) und GateKeeper  
+Themen: Reflective DLL Injection mit TokenTheft als Payload mit Rechteerweiterung und diversen Stealth mechanismen mit HellsHall (indirect syscall) und GateKeeper CPU Breakpoint
 
 
 
