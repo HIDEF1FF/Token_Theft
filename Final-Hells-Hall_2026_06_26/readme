@@ -1,1 +1,9 @@
 Achtung : Der Pfad in der Batchdateie muss angepasst werden!
+
+Usage: ReflectiveInjector.exe [options]
+
+Options: 
+--console, -c      Show console (Debug) 
+--hide,    -h      Hide console (Stealth)
+--poolparty, -pp  Enable PoolParty
+                
